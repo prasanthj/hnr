@@ -35,3 +35,49 @@ impl Session {
         let _ = std::fs::remove_file(Self::path());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    fn with_temp_home<F: FnOnce()>(f: F) {
+        let dir = tempfile::tempdir().unwrap();
+        let orig = env::var("HOME").unwrap_or_default();
+        env::set_var("HOME", dir.path());
+        f();
+        env::set_var("HOME", orig);
+    }
+
+    #[test]
+    fn save_and_load_round_trip() {
+        with_temp_home(|| {
+            let session = Session {
+                username: "pg".into(),
+                cookie: "user=abc123xyz".into(),
+            };
+            session.save();
+            let loaded = Session::load().expect("should load");
+            assert_eq!(loaded.username, "pg");
+            assert_eq!(loaded.cookie, "user=abc123xyz");
+        });
+    }
+
+    #[test]
+    fn load_returns_none_when_no_file() {
+        with_temp_home(|| {
+            assert!(Session::load().is_none());
+        });
+    }
+
+    #[test]
+    fn delete_removes_session() {
+        with_temp_home(|| {
+            let session = Session { username: "x".into(), cookie: "user=y".into() };
+            session.save();
+            assert!(Session::load().is_some());
+            Session::delete();
+            assert!(Session::load().is_none());
+        });
+    }
+}

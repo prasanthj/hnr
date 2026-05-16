@@ -159,6 +159,142 @@ impl User {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn make_item(id: u64) -> Item {
+    Item {
+        id,
+        kind: None,
+        title: Some(format!("Story {id}")),
+        url: Some(format!("https://example.com/{id}")),
+        text: None,
+        by: Some(format!("user{id}")),
+        score: Some(100),
+        time: None,
+        descendants: Some(10),
+        kids: None,
+        parent: None,
+        deleted: None,
+        dead: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: u64) -> Item {
+        make_item(id)
+    }
+
+    fn deleted_item(id: u64) -> Item {
+        Item { id, deleted: Some(true), ..item(id) }
+    }
+
+    fn dead_item(id: u64) -> Item {
+        Item { id, dead: Some(true), ..item(id) }
+    }
+
+    fn bare_item(id: u64) -> Item {
+        Item {
+            id,
+            kind: None, title: None, url: None, text: None,
+            by: None, score: None, time: None, descendants: None,
+            kids: None, parent: None, deleted: None, dead: None,
+        }
+    }
+
+    #[test]
+    fn display_title_falls_back() {
+        assert_eq!(bare_item(1).display_title(), "[untitled]");
+        assert_eq!(item(1).display_title(), "Story 1");
+    }
+
+    #[test]
+    fn display_by_falls_back() {
+        assert_eq!(bare_item(1).display_by(), "?");
+        assert_eq!(item(1).display_by(), "user1");
+    }
+
+    #[test]
+    fn score_defaults_zero() {
+        assert_eq!(bare_item(1).score(), 0);
+        assert_eq!(item(1).score(), 100);
+    }
+
+    #[test]
+    fn comment_count_defaults_zero() {
+        assert_eq!(bare_item(1).comment_count(), 0);
+        assert_eq!(item(1).comment_count(), 10);
+    }
+
+    #[test]
+    fn deleted_and_dead_detection() {
+        assert!(!item(1).is_deleted_or_dead());
+        assert!(deleted_item(1).is_deleted_or_dead());
+        assert!(dead_item(1).is_deleted_or_dead());
+    }
+
+    #[test]
+    fn text_plain_empty_when_no_text() {
+        assert_eq!(bare_item(1).text_plain(), "");
+    }
+
+    #[test]
+    fn text_plain_strips_html() {
+        let item = Item { text: Some("<p>Hello <b>world</b></p>".into()), ..bare_item(1) };
+        let plain = item.text_plain();
+        assert!(plain.contains("Hello"));
+        assert!(plain.contains("world"));
+        assert!(!plain.contains("<p>"));
+    }
+
+    #[test]
+    fn user_submission_count() {
+        let user = User {
+            id: "pg".into(),
+            karma: 155000,
+            created: 1000000,
+            about: None,
+            submitted: Some(vec![1, 2, 3]),
+        };
+        assert_eq!(user.submission_count(), 3);
+
+        let no_subs = User { submitted: None, ..user };
+        assert_eq!(no_subs.submission_count(), 0);
+    }
+
+    #[test]
+    fn user_joined_ago_formats_correctly() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let recent = User { id: "x".into(), karma: 1, created: now - 5 * 86400, about: None, submitted: None };
+        assert!(recent.joined_ago().contains("days ago"), "got: {}", recent.joined_ago());
+
+        let months = User { created: now - 60 * 86400, ..recent.clone() };
+        assert!(months.joined_ago().contains("months ago"), "got: {}", months.joined_ago());
+
+        let years = User { created: now - 400 * 86400, ..recent.clone() };
+        assert!(years.joined_ago().contains("years ago"), "got: {}", years.joined_ago());
+    }
+
+    #[test]
+    fn user_about_strips_html() {
+        let user = User {
+            id: "pg".into(),
+            karma: 1,
+            created: 0,
+            about: Some("<a href='http://x.com'>My site</a>".into()),
+            submitted: None,
+        };
+        let plain = user.about_plain();
+        assert!(plain.contains("My site"));
+        assert!(!plain.contains("<a"));
+    }
+}
+
 pub async fn fetch_user(client: &reqwest::Client, username: &str) -> anyhow::Result<User> {
     let user: User = client
         .get(format!("{BASE}/user/{username}.json"))

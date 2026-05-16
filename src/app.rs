@@ -492,6 +492,181 @@ impl App {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::make_item;
+
+    fn make_node(id: u64, children: Vec<CommentNode>) -> CommentNode {
+        CommentNode { item: make_item(id), depth: 0, collapsed: false, children }
+    }
+
+    fn make_node_depth(id: u64, depth: usize, children: Vec<CommentNode>) -> CommentNode {
+        CommentNode { item: make_item(id), depth, collapsed: false, children }
+    }
+
+    // ── CommentNode::flatten ──────────────────────────────────────────────
+
+    #[test]
+    fn flatten_leaf_returns_self() {
+        let node = make_node(1, vec![]);
+        let flat = node.flatten();
+        assert_eq!(flat.len(), 1);
+        assert_eq!(flat[0].0.item.id, 1);
+    }
+
+    #[test]
+    fn flatten_includes_children() {
+        let child = make_node(2, vec![]);
+        let parent = make_node(1, vec![child]);
+        let flat = parent.flatten();
+        assert_eq!(flat.len(), 2);
+        assert_eq!(flat[0].0.item.id, 1);
+        assert_eq!(flat[1].0.item.id, 2);
+    }
+
+    #[test]
+    fn flatten_collapsed_hides_children() {
+        let child = make_node(2, vec![]);
+        let mut parent = make_node(1, vec![child]);
+        parent.collapsed = true;
+        let flat = parent.flatten();
+        assert_eq!(flat.len(), 1);
+        assert_eq!(flat[0].0.item.id, 1);
+    }
+
+    #[test]
+    fn flatten_nested_depth_order() {
+        let grandchild = make_node_depth(3, 2, vec![]);
+        let child = make_node_depth(2, 1, vec![grandchild]);
+        let parent = make_node_depth(1, 0, vec![child]);
+        let flat = parent.flatten();
+        assert_eq!(flat.len(), 3);
+        assert_eq!(flat[0].0.item.id, 1);
+        assert_eq!(flat[1].0.item.id, 2);
+        assert_eq!(flat[2].0.item.id, 3);
+    }
+
+    #[test]
+    fn flatten_collapsed_mid_tree_hides_subtree() {
+        let grandchild = make_node_depth(3, 2, vec![]);
+        let mut child = make_node_depth(2, 1, vec![grandchild]);
+        child.collapsed = true;
+        let parent = make_node_depth(1, 0, vec![child]);
+        let flat = parent.flatten();
+        // parent + collapsed child visible, grandchild hidden
+        assert_eq!(flat.len(), 2);
+        assert_eq!(flat[1].0.item.id, 2);
+    }
+
+    // ── toggle_in_tree ────────────────────────────────────────────────────
+
+    #[test]
+    fn toggle_root_node() {
+        let child = make_node(2, vec![]);
+        let mut nodes = vec![make_node(1, vec![child])];
+        assert!(!nodes[0].collapsed);
+        toggle_in_tree(&mut nodes, 1);
+        assert!(nodes[0].collapsed);
+        toggle_in_tree(&mut nodes, 1);
+        assert!(!nodes[0].collapsed);
+    }
+
+    #[test]
+    fn toggle_nested_node() {
+        let child = make_node(2, vec![]);
+        let mut nodes = vec![make_node(1, vec![child])];
+        assert!(!nodes[0].children[0].collapsed);
+        toggle_in_tree(&mut nodes, 2);
+        assert!(nodes[0].children[0].collapsed);
+    }
+
+    #[test]
+    fn toggle_nonexistent_id_is_noop() {
+        let mut nodes = vec![make_node(1, vec![])];
+        toggle_in_tree(&mut nodes, 99);
+        assert!(!nodes[0].collapsed);
+    }
+
+    // ── App scroll ────────────────────────────────────────────────────────
+
+    fn make_app_with_stories(n: usize) -> App {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.stories = (1..=n as u64).map(make_item).collect();
+        app
+    }
+
+    #[test]
+    fn story_scroll_down_increments_cursor() {
+        let mut app = make_app_with_stories(5);
+        app.scroll_story_down(10);
+        assert_eq!(app.story_cursor, 1);
+        assert_eq!(app.story_scroll, 0);
+    }
+
+    #[test]
+    fn story_scroll_advances_when_cursor_hits_visible_boundary() {
+        let mut app = make_app_with_stories(10);
+        for _ in 0..5 {
+            app.scroll_story_down(5);
+        }
+        assert_eq!(app.story_cursor, 5);
+        assert_eq!(app.story_scroll, 1);
+    }
+
+    #[test]
+    fn story_scroll_up_decrements_cursor() {
+        let mut app = make_app_with_stories(5);
+        app.story_cursor = 3;
+        app.story_scroll = 2;
+        app.scroll_story_up();
+        assert_eq!(app.story_cursor, 2);
+        assert_eq!(app.story_scroll, 2);
+    }
+
+    #[test]
+    fn story_scroll_up_adjusts_scroll_when_cursor_above_window() {
+        let mut app = make_app_with_stories(5);
+        app.story_cursor = 2;
+        app.story_scroll = 3;
+        app.scroll_story_up();
+        assert_eq!(app.story_cursor, 1);
+        assert_eq!(app.story_scroll, 1);
+    }
+
+    #[test]
+    fn story_scroll_down_stops_at_end() {
+        let mut app = make_app_with_stories(3);
+        app.story_cursor = 2;
+        app.scroll_story_down(10);
+        assert_eq!(app.story_cursor, 2);
+    }
+
+    #[test]
+    fn story_scroll_up_stops_at_zero() {
+        let mut app = make_app_with_stories(3);
+        app.story_cursor = 0;
+        app.scroll_story_up();
+        assert_eq!(app.story_cursor, 0);
+        assert_eq!(app.story_scroll, 0);
+    }
+
+    #[test]
+    fn selected_story_returns_correct_item() {
+        let mut app = make_app_with_stories(5);
+        app.story_cursor = 2;
+        assert_eq!(app.selected_story().unwrap().id, 3);
+    }
+
+    #[test]
+    fn selected_story_none_when_empty() {
+        let client = reqwest::Client::new();
+        let app = App::new(client);
+        assert!(app.selected_story().is_none());
+    }
+}
+
 fn toggle_in_tree(nodes: &mut Vec<CommentNode>, id: u64) {
     for node in nodes.iter_mut() {
         if node.item.id == id {
