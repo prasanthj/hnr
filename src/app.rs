@@ -1,4 +1,5 @@
 use crate::api::{fetch_ask_ids, fetch_best_ids, fetch_new_ids, fetch_show_ids, fetch_top_ids, Item, User};
+use crate::session::Session;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,9 +36,45 @@ pub enum ViewMode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum LoginField {
+    Username,
+    Password,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoginState {
+    pub username: String,
+    pub password: String,
+    pub field: LoginField,
+    pub error: String,
+}
+
+impl LoginState {
+    pub fn new() -> Self {
+        Self {
+            username: String::new(),
+            password: String::new(),
+            field: LoginField::Username,
+            error: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ComposeState {
+    pub text: String,
+    pub parent_id: u64,
+    pub story_id: u64,
+    pub hmac: String,
+    pub parent_by: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
     Normal,
     Command,
+    Login,
+    Compose,
 }
 
 #[derive(Clone)]
@@ -50,12 +87,7 @@ pub struct CommentNode {
 
 impl CommentNode {
     pub fn new(item: Item, depth: usize) -> Self {
-        Self {
-            item,
-            depth,
-            collapsed: false,
-            children: vec![],
-        }
+        Self { item, depth, collapsed: false, children: vec![] }
     }
 
     pub fn flatten(&self) -> Vec<(&CommentNode, usize)> {
@@ -67,7 +99,6 @@ impl CommentNode {
         }
         out
     }
-
 }
 
 pub struct App {
@@ -88,6 +119,10 @@ pub struct App {
 
     pub view_mode: ViewMode,
     pub user_profile: Option<User>,
+
+    pub session: Option<Session>,
+    pub login_state: LoginState,
+    pub compose_state: Option<ComposeState>,
 
     pub loading: bool,
     pub client: reqwest::Client,
@@ -111,6 +146,9 @@ impl App {
             status_message: String::from("Loading..."),
             view_mode: ViewMode::Story,
             user_profile: None,
+            session: Session::load(),
+            login_state: LoginState::new(),
+            compose_state: None,
             loading: false,
             client,
             item_cache: HashMap::new(),
@@ -172,6 +210,188 @@ impl App {
         }
     }
 
+    pub fn username_at_cursor(&self) -> Option<String> {
+        match self.active_pane {
+            Pane::Stories => self.selected_story().and_then(|s| s.by.clone()),
+            Pane::Comments => {
+                let flat = self.flat_comments();
+                flat.get(self.comment_cursor)
+                    .and_then(|(node, _)| node.item.by.clone())
+            }
+        }
+    }
+
+    // ── Auth ──────────────────────────────────────────────────────────────
+
+    pub fn start_login(&mut self) {
+        self.login_state = LoginState::new();
+        self.mode = Mode::Login;
+    }
+
+    pub async fn submit_login(&mut self) {
+        let username = self.login_state.username.trim().to_string();
+        let password = self.login_state.password.clone();
+        if username.is_empty() || password.is_empty() {
+            self.login_state.error = "Username and password required".into();
+            return;
+        }
+        self.login_state.error = "Logging in...".into();
+        match crate::api::login(&username, &password).await {
+            Ok(cookie) => {
+                let session = Session { username: username.clone(), cookie };
+                session.save();
+                self.session = Some(session);
+                self.mode = Mode::Normal;
+                self.status_message = format!("Logged in as {username} | v vote | c comment");
+            }
+            Err(e) => {
+                self.login_state.error = e.to_string();
+            }
+        }
+    }
+
+    pub fn logout(&mut self) {
+        Session::delete();
+        self.session = None;
+        self.status_message = "Logged out.".into();
+    }
+
+    // ── Vote ──────────────────────────────────────────────────────────────
+
+    pub async fn vote_current(&mut self) {
+        let session = match &self.session {
+            Some(s) => s.clone(),
+            None => {
+                self.status_message = "Not logged in — /login first".into();
+                return;
+            }
+        };
+
+        let (item_id, story_id) = match self.active_pane {
+            Pane::Stories => {
+                match self.selected_story() {
+                    Some(s) => (s.id, s.id),
+                    None => return,
+                }
+            }
+            Pane::Comments => {
+                let story_id = match self.selected_story() {
+                    Some(s) => s.id,
+                    None => return,
+                };
+                let flat = self.flat_comments();
+                match flat.get(self.comment_cursor) {
+                    Some((node, _)) => (node.item.id, story_id),
+                    None => return,
+                }
+            }
+        };
+
+        self.status_message = "Fetching vote token...".into();
+        self.loading = true;
+        let client = self.client.clone();
+        match crate::api::fetch_vote_auth(&client, &session.cookie, item_id, story_id).await {
+            Ok(auth) => {
+                match crate::api::vote_item(&client, &session.cookie, item_id, &auth, story_id).await {
+                    Ok(_) => self.status_message = "Voted!".into(),
+                    Err(e) => self.status_message = format!("Vote failed: {e}"),
+                }
+            }
+            Err(e) => self.status_message = format!("Vote: {e}"),
+        }
+        self.loading = false;
+    }
+
+    // ── Compose ───────────────────────────────────────────────────────────
+
+    pub async fn start_compose(&mut self) {
+        let session = match &self.session {
+            Some(s) => s.clone(),
+            None => {
+                self.status_message = "Not logged in — /login first".into();
+                return;
+            }
+        };
+
+        let (parent_id, story_id, parent_by) = match self.active_pane {
+            Pane::Stories => {
+                match self.selected_story() {
+                    Some(s) => (s.id, s.id, s.display_by().to_string()),
+                    None => return,
+                }
+            }
+            Pane::Comments => {
+                let story_id = match self.selected_story() {
+                    Some(s) => s.id,
+                    None => return,
+                };
+                let flat = self.flat_comments();
+                match flat.get(self.comment_cursor) {
+                    Some((node, _)) => (node.item.id, story_id, node.item.display_by().to_string()),
+                    None => return,
+                }
+            }
+        };
+
+        self.status_message = "Fetching reply token...".into();
+        self.loading = true;
+        let client = self.client.clone();
+        match crate::api::fetch_reply_hmac(&client, &session.cookie, parent_id).await {
+            Ok(hmac) => {
+                self.compose_state = Some(ComposeState {
+                    text: String::new(),
+                    parent_id,
+                    story_id,
+                    hmac,
+                    parent_by,
+                });
+                self.mode = Mode::Compose;
+                self.status_message = "Ctrl+S submit | Esc cancel".into();
+            }
+            Err(e) => self.status_message = format!("Compose: {e}"),
+        }
+        self.loading = false;
+    }
+
+    pub async fn submit_comment(&mut self) {
+        let session = match &self.session {
+            Some(s) => s.clone(),
+            None => return,
+        };
+        let state = match self.compose_state.take() {
+            Some(s) => s,
+            None => return,
+        };
+        if state.text.trim().is_empty() {
+            self.compose_state = Some(state);
+            self.status_message = "Comment is empty.".into();
+            return;
+        }
+        self.mode = Mode::Normal;
+        self.status_message = "Posting comment...".into();
+        self.loading = true;
+        let client = self.client.clone();
+        match crate::api::post_comment(
+            &client,
+            &session.cookie,
+            state.parent_id,
+            state.story_id,
+            &state.hmac,
+            &state.text,
+        )
+        .await
+        {
+            Ok(_) => {
+                self.status_message = "Comment posted! Reloading...".into();
+                self.load_comments().await;
+            }
+            Err(e) => self.status_message = format!("Post failed: {e}"),
+        }
+        self.loading = false;
+    }
+
+    // ── Feed / comments ───────────────────────────────────────────────────
+
     pub async fn load_feed(&mut self) {
         self.loading = true;
         self.status_message = format!("Loading {} stories...", self.feed.label());
@@ -203,13 +423,11 @@ impl App {
                 self.comment_scroll = 0;
                 self.active_pane = Pane::Stories;
                 self.status_message = format!(
-                    "{} stories loaded | j/k navigate | Enter open | Tab switch pane | / command",
+                    "{} stories | j/k navigate | Enter comments | Tab pane | v vote | c reply | / cmd",
                     self.stories.len()
                 );
             }
-            Err(e) => {
-                self.status_message = format!("Error: {e}");
-            }
+            Err(e) => self.status_message = format!("Error: {e}"),
         }
         self.loading = false;
     }
@@ -229,20 +447,9 @@ impl App {
             self.comment_cursor = 0;
             self.comment_scroll = 0;
             self.status_message = format!(
-                "{} top-level comments | j/k navigate | Space collapse | Tab switch pane",
+                "{} top-level threads | j/k | Space collapse | u profile | v vote | c reply | Tab back",
                 self.comments.len()
             );
-        }
-    }
-
-    pub fn username_at_cursor(&self) -> Option<String> {
-        match self.active_pane {
-            Pane::Stories => self.selected_story().and_then(|s| s.by.clone()),
-            Pane::Comments => {
-                let flat = self.flat_comments();
-                flat.get(self.comment_cursor)
-                    .and_then(|(node, _)| node.item.by.clone())
-            }
         }
     }
 
@@ -252,16 +459,11 @@ impl App {
         let client = self.client.clone();
         match crate::api::fetch_user(&client, &username).await {
             Ok(user) => {
-                self.status_message = format!(
-                    "{} | karma: {} | Esc to go back",
-                    user.id, user.karma
-                );
+                self.status_message = format!("{} | {} karma | Esc back", user.id, user.karma);
                 self.user_profile = Some(user);
                 self.view_mode = ViewMode::User;
             }
-            Err(e) => {
-                self.status_message = format!("Failed to load user: {e}");
-            }
+            Err(e) => self.status_message = format!("Failed to load user: {e}"),
         }
         self.loading = false;
     }
@@ -300,11 +502,7 @@ fn toggle_in_tree(nodes: &mut Vec<CommentNode>, id: u64) {
     }
 }
 
-async fn load_comment_tree(
-    client: &reqwest::Client,
-    ids: &[u64],
-    depth: usize,
-) -> Vec<CommentNode> {
+async fn load_comment_tree(client: &reqwest::Client, ids: &[u64], depth: usize) -> Vec<CommentNode> {
     let items = crate::api::fetch_items(client, ids).await;
     let mut nodes = vec![];
     for item in items {

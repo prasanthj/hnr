@@ -1,8 +1,9 @@
 mod api;
 mod app;
+mod session;
 mod ui;
 
-use app::{App, Feed, Mode, Pane, ViewMode};
+use app::{App, Feed, LoginField, Mode, Pane, ViewMode};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -21,6 +22,11 @@ async fn main() -> anyhow::Result<()> {
 
     let client = reqwest::Client::new();
     let mut app = App::new(client);
+
+    if app.session.is_some() {
+        let name = app.session.as_ref().unwrap().username.clone();
+        app.status_message = format!("Logged in as {name} | Loading...");
+    }
     app.load_feed().await;
 
     loop {
@@ -30,110 +36,19 @@ async fn main() -> anyhow::Result<()> {
             continue;
         }
 
-        let ev = event::read()?;
-        if let Event::Key(key) = ev {
-            match app.mode {
-                Mode::Command => {
-                    match key.code {
-                        KeyCode::Esc => {
-                            app.mode = Mode::Normal;
-                            app.command_input.clear();
-                        }
-                        KeyCode::Enter => {
-                            let cmd = app.command_input.trim().to_lowercase();
-                            app.command_input.clear();
-                            app.mode = Mode::Normal;
-                            handle_command(&mut app, &cmd).await;
-                        }
-                        KeyCode::Backspace => {
-                            app.command_input.pop();
-                        }
-                        KeyCode::Char(c) => {
-                            app.command_input.push(c);
-                        }
-                        _ => {}
-                    }
-                }
+        if let Event::Key(key) = event::read()? {
+            match app.mode.clone() {
+                Mode::Login => handle_login_keys(&mut app, key.code, key.modifiers).await,
+                Mode::Compose => handle_compose_keys(&mut app, key.code, key.modifiers).await,
+                Mode::Command => handle_command_keys(&mut app, key.code).await,
                 Mode::Normal => {
-                    if key.code == KeyCode::Char('q') {
+                    let h = terminal.size()?.height as usize;
+                    handle_normal_keys(&mut app, key.code, key.modifiers, h).await;
+                    if app.mode == Mode::Normal
+                        && matches!(key.code, KeyCode::Char('q'))
+                        && app.view_mode != ViewMode::User
+                    {
                         break;
-                    }
-                    if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                        break;
-                    }
-
-                    if key.code == KeyCode::Char('/') {
-                        app.mode = Mode::Command;
-                        continue;
-                    }
-
-                    // user profile view intercepts Esc and o
-                    if app.view_mode == ViewMode::User {
-                        match key.code {
-                            KeyCode::Esc | KeyCode::Char('q') => app.close_user_profile(),
-                            KeyCode::Char('o') => {
-                                if let Some(user) = &app.user_profile {
-                                    let url = format!("https://news.ycombinator.com/user?id={}", user.id);
-                                    let _ = open::that(url);
-                                }
-                            }
-                            _ => {}
-                        }
-                        continue;
-                    }
-
-                    match app.active_pane {
-                        Pane::Stories => match key.code {
-                            KeyCode::Char('j') | KeyCode::Down => {
-                                let h = terminal.size()?.height as usize;
-                                app.scroll_story_down(h.saturating_sub(10));
-                            }
-                            KeyCode::Char('k') | KeyCode::Up => {
-                                app.scroll_story_up();
-                            }
-                            KeyCode::Enter => {
-                                app.active_pane = Pane::Comments;
-                                app.load_comments().await;
-                            }
-                            KeyCode::Tab => {
-                                if !app.comments.is_empty() {
-                                    app.active_pane = Pane::Comments;
-                                }
-                            }
-                            KeyCode::Char('u') => {
-                                if let Some(name) = app.username_at_cursor() {
-                                    app.load_user(name).await;
-                                }
-                            }
-                            KeyCode::Char('o') => app.open_story_in_browser(),
-                            KeyCode::Char('O') => app.open_hn_page_in_browser(),
-                            KeyCode::Char('r') => app.load_feed().await,
-                            KeyCode::Char('1') => switch_feed(&mut app, Feed::Top).await,
-                            KeyCode::Char('2') => switch_feed(&mut app, Feed::New).await,
-                            KeyCode::Char('3') => switch_feed(&mut app, Feed::Best).await,
-                            KeyCode::Char('4') => switch_feed(&mut app, Feed::Ask).await,
-                            KeyCode::Char('5') => switch_feed(&mut app, Feed::Show).await,
-                            _ => {}
-                        },
-                        Pane::Comments => match key.code {
-                            KeyCode::Char('j') | KeyCode::Down => {
-                                let h = terminal.size()?.height as usize;
-                                app.scroll_comment_down(h.saturating_sub(10));
-                            }
-                            KeyCode::Char('k') | KeyCode::Up => {
-                                app.scroll_comment_up();
-                            }
-                            KeyCode::Char(' ') => app.toggle_current_comment(),
-                            KeyCode::Tab | KeyCode::Esc => app.active_pane = Pane::Stories,
-                            KeyCode::Char('u') => {
-                                if let Some(name) = app.username_at_cursor() {
-                                    app.load_user(name).await;
-                                }
-                            }
-                            KeyCode::Char('o') => app.open_story_in_browser(),
-                            KeyCode::Char('O') => app.open_hn_page_in_browser(),
-                            _ => {}
-                        },
                     }
                 }
             }
@@ -141,13 +56,162 @@ async fn main() -> anyhow::Result<()> {
     }
 
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
     Ok(())
+}
+
+async fn handle_login_keys(app: &mut App, code: KeyCode, _mods: KeyModifiers) {
+    match code {
+        KeyCode::Esc => {
+            app.mode = Mode::Normal;
+            app.status_message = "Login cancelled.".into();
+        }
+        KeyCode::Tab | KeyCode::BackTab => {
+            app.login_state.field = match app.login_state.field {
+                LoginField::Username => LoginField::Password,
+                LoginField::Password => LoginField::Username,
+            };
+        }
+        KeyCode::Enter => match app.login_state.field {
+            LoginField::Username => app.login_state.field = LoginField::Password,
+            LoginField::Password => app.submit_login().await,
+        },
+        KeyCode::Backspace => {
+            match app.login_state.field {
+                LoginField::Username => { app.login_state.username.pop(); }
+                LoginField::Password => { app.login_state.password.pop(); }
+            }
+        }
+        KeyCode::Char(c) => {
+            match app.login_state.field {
+                LoginField::Username => app.login_state.username.push(c),
+                LoginField::Password => app.login_state.password.push(c),
+            }
+        }
+        _ => {}
+    }
+}
+
+async fn handle_compose_keys(app: &mut App, code: KeyCode, mods: KeyModifiers) {
+    match code {
+        KeyCode::Esc => {
+            app.compose_state = None;
+            app.mode = Mode::Normal;
+            app.status_message = "Compose cancelled.".into();
+        }
+        KeyCode::Char('s') if mods.contains(KeyModifiers::CONTROL) => {
+            app.submit_comment().await;
+        }
+        KeyCode::Enter => {
+            if let Some(state) = &mut app.compose_state {
+                state.text.push('\n');
+            }
+        }
+        KeyCode::Backspace => {
+            if let Some(state) = &mut app.compose_state {
+                state.text.pop();
+            }
+        }
+        KeyCode::Char(c) => {
+            if let Some(state) = &mut app.compose_state {
+                state.text.push(c);
+            }
+        }
+        _ => {}
+    }
+}
+
+async fn handle_command_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            app.mode = Mode::Normal;
+            app.command_input.clear();
+        }
+        KeyCode::Enter => {
+            let cmd = app.command_input.trim().to_lowercase().to_string();
+            app.command_input.clear();
+            app.mode = Mode::Normal;
+            run_command(app, &cmd).await;
+        }
+        KeyCode::Backspace => { app.command_input.pop(); }
+        KeyCode::Char(c) => app.command_input.push(c),
+        _ => {}
+    }
+}
+
+async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, height: usize) {
+    if code == KeyCode::Char('c') && mods.contains(KeyModifiers::CONTROL) {
+        std::process::exit(0);
+    }
+    if code == KeyCode::Char('/') {
+        app.mode = Mode::Command;
+        return;
+    }
+
+    // User profile view captures input
+    if app.view_mode == ViewMode::User {
+        match code {
+            KeyCode::Esc | KeyCode::Char('q') => app.close_user_profile(),
+            KeyCode::Char('o') => {
+                if let Some(user) = &app.user_profile {
+                    let url = format!("https://news.ycombinator.com/user?id={}", user.id);
+                    let _ = open::that(url);
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
+
+    let visible = height.saturating_sub(10);
+    match app.active_pane {
+        Pane::Stories => match code {
+            KeyCode::Char('j') | KeyCode::Down  => app.scroll_story_down(visible),
+            KeyCode::Char('k') | KeyCode::Up    => app.scroll_story_up(),
+            KeyCode::Enter => {
+                app.active_pane = Pane::Comments;
+                app.load_comments().await;
+            }
+            KeyCode::Tab => {
+                if !app.comments.is_empty() {
+                    app.active_pane = Pane::Comments;
+                }
+            }
+            KeyCode::Char('u') => {
+                if let Some(name) = app.username_at_cursor() {
+                    app.load_user(name).await;
+                }
+            }
+            KeyCode::Char('v') => app.vote_current().await,
+            KeyCode::Char('c') => app.start_compose().await,
+            KeyCode::Char('o') => app.open_story_in_browser(),
+            KeyCode::Char('O') => app.open_hn_page_in_browser(),
+            KeyCode::Char('r') => app.load_feed().await,
+            KeyCode::Char('1') => switch_feed(app, Feed::Top).await,
+            KeyCode::Char('2') => switch_feed(app, Feed::New).await,
+            KeyCode::Char('3') => switch_feed(app, Feed::Best).await,
+            KeyCode::Char('4') => switch_feed(app, Feed::Ask).await,
+            KeyCode::Char('5') => switch_feed(app, Feed::Show).await,
+            _ => {}
+        },
+        Pane::Comments => match code {
+            KeyCode::Char('j') | KeyCode::Down  => app.scroll_comment_down(visible),
+            KeyCode::Char('k') | KeyCode::Up    => app.scroll_comment_up(),
+            KeyCode::Char(' ')                   => app.toggle_current_comment(),
+            KeyCode::Tab | KeyCode::Esc          => app.active_pane = Pane::Stories,
+            KeyCode::Char('u') => {
+                if let Some(name) = app.username_at_cursor() {
+                    app.load_user(name).await;
+                }
+            }
+            KeyCode::Char('v') => app.vote_current().await,
+            KeyCode::Char('c') => app.start_compose().await,
+            KeyCode::Char('o') => app.open_story_in_browser(),
+            KeyCode::Char('O') => app.open_hn_page_in_browser(),
+            _ => {}
+        },
+    }
 }
 
 async fn switch_feed(app: &mut App, feed: Feed) {
@@ -157,27 +221,26 @@ async fn switch_feed(app: &mut App, feed: Feed) {
     }
 }
 
-async fn handle_command(app: &mut App, cmd: &str) {
+async fn run_command(app: &mut App, cmd: &str) {
     let mut parts = cmd.splitn(2, ' ');
     let verb = parts.next().unwrap_or("");
     let arg = parts.next().unwrap_or("").trim();
 
     match verb {
         "q" | "quit" | "exit" => std::process::exit(0),
-        "top" | "1" => switch_feed(app, Feed::Top).await,
-        "new" | "2" => switch_feed(app, Feed::New).await,
-        "best" | "3" => switch_feed(app, Feed::Best).await,
-        "ask" | "4" => switch_feed(app, Feed::Ask).await,
-        "show" | "5" => switch_feed(app, Feed::Show).await,
-        "refresh" | "r" => app.load_feed().await,
-        "open" | "o" => app.open_story_in_browser(),
-        "hn" => app.open_hn_page_in_browser(),
+        "login"               => app.start_login(),
+        "logout"              => app.logout(),
+        "top"  | "1"          => switch_feed(app, Feed::Top).await,
+        "new"  | "2"          => switch_feed(app, Feed::New).await,
+        "best" | "3"          => switch_feed(app, Feed::Best).await,
+        "ask"  | "4"          => switch_feed(app, Feed::Ask).await,
+        "show" | "5"          => switch_feed(app, Feed::Show).await,
+        "refresh" | "r"       => app.load_feed().await,
+        "open" | "o"          => app.open_story_in_browser(),
+        "hn"                  => app.open_hn_page_in_browser(),
+        "vote" | "v"          => app.vote_current().await,
         "user" | "u" => {
-            let name = if arg.is_empty() {
-                app.username_at_cursor()
-            } else {
-                Some(arg.to_string())
-            };
+            let name = if arg.is_empty() { app.username_at_cursor() } else { Some(arg.to_string()) };
             if let Some(name) = name {
                 app.load_user(name).await;
             } else {
@@ -186,10 +249,8 @@ async fn handle_command(app: &mut App, cmd: &str) {
         }
         "help" | "?" => {
             app.status_message =
-                "Commands: top/new/best/ask/show | user <name> | refresh | open | hn | quit | 1-5 feeds".into();
+                "login · logout · top/new/best/ask/show · user <n> · refresh · open · hn · vote · quit".into();
         }
-        other => {
-            app.status_message = format!("Unknown command: '{other}'. Try /help");
-        }
+        other => app.status_message = format!("Unknown: '{other}' — try /help"),
     }
 }

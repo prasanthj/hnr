@@ -168,3 +168,114 @@ pub async fn fetch_user(client: &reqwest::Client, username: &str) -> anyhow::Res
         .await?;
     Ok(user)
 }
+
+pub async fn login(username: &str, password: &str) -> anyhow::Result<String> {
+    let client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let params = [("acct", username), ("pw", password), ("goto", "news")];
+    let resp = client
+        .post("https://news.ycombinator.com/login")
+        .form(&params)
+        .send()
+        .await?;
+
+    for value in resp.headers().get_all(reqwest::header::SET_COOKIE) {
+        let s = value.to_str().unwrap_or("");
+        if s.starts_with("user=") && !s.contains("user=deleted") {
+            let cookie = s.split(';').next().unwrap_or("").trim().to_string();
+            return Ok(cookie);
+        }
+    }
+    anyhow::bail!("Login failed — check your credentials")
+}
+
+pub async fn fetch_vote_auth(
+    client: &reqwest::Client,
+    cookie: &str,
+    item_id: u64,
+    story_id: u64,
+) -> anyhow::Result<String> {
+    let html = client
+        .get(format!("https://news.ycombinator.com/item?id={story_id}"))
+        .header("Cookie", cookie)
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let needle = format!("vote?id={item_id}&how=up&auth=");
+    if let Some(pos) = html.find(&needle) {
+        let after = &html[pos + needle.len()..];
+        let auth: String = after.chars().take_while(|c| c.is_alphanumeric()).collect();
+        if !auth.is_empty() {
+            return Ok(auth);
+        }
+    }
+    anyhow::bail!("Vote auth not found — already voted or not eligible")
+}
+
+pub async fn vote_item(
+    client: &reqwest::Client,
+    cookie: &str,
+    item_id: u64,
+    auth: &str,
+    story_id: u64,
+) -> anyhow::Result<()> {
+    let url = format!(
+        "https://news.ycombinator.com/vote?id={item_id}&how=up&auth={auth}&goto=item%3Fid%3D{story_id}"
+    );
+    client
+        .get(&url)
+        .header("Cookie", cookie)
+        .send()
+        .await?;
+    Ok(())
+}
+
+pub async fn fetch_reply_hmac(
+    client: &reqwest::Client,
+    cookie: &str,
+    parent_id: u64,
+) -> anyhow::Result<String> {
+    let html = client
+        .get(format!("https://news.ycombinator.com/reply?id={parent_id}"))
+        .header("Cookie", cookie)
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let needle = r#"name="hmac" value=""#;
+    if let Some(pos) = html.find(needle) {
+        let after = &html[pos + needle.len()..];
+        let hmac: String = after.chars().take_while(|c| *c != '"').collect();
+        if !hmac.is_empty() {
+            return Ok(hmac);
+        }
+    }
+    anyhow::bail!("Could not get reply token — are you logged in?")
+}
+
+pub async fn post_comment(
+    client: &reqwest::Client,
+    cookie: &str,
+    parent_id: u64,
+    story_id: u64,
+    hmac: &str,
+    text: &str,
+) -> anyhow::Result<()> {
+    let params = [
+        ("parent", parent_id.to_string()),
+        ("goto", format!("item?id={story_id}")),
+        ("hmac", hmac.to_string()),
+        ("text", text.to_string()),
+    ];
+    client
+        .post("https://news.ycombinator.com/comment")
+        .header("Cookie", cookie)
+        .form(&params)
+        .send()
+        .await?;
+    Ok(())
+}
