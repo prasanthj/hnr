@@ -117,6 +117,16 @@ pub async fn fetch_show_ids(client: &reqwest::Client, base: &str) -> anyhow::Res
     Ok(ids)
 }
 
+pub async fn fetch_job_ids(client: &reqwest::Client, base: &str) -> anyhow::Result<Vec<u64>> {
+    let ids: Vec<u64> = client
+        .get(format!("{base}/jobstories.json"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(ids)
+}
+
 pub async fn fetch_item(client: &reqwest::Client, id: u64, base: &str) -> anyhow::Result<Item> {
     let item: Item = client
         .get(format!("{base}/item/{id}.json"))

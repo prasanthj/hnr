@@ -44,7 +44,8 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         ("3", "Best"),
         ("4", "Ask"),
         ("5", "Show"),
-        ("6", "Bookmarks"),
+        ("6", "Jobs"),
+        ("7", "Bookmarks"),
     ];
     let current = app.feed.label();
     let mut spans = vec![
@@ -135,24 +136,26 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                     ("Enter", "comments"),
                     ("Tab", "→pane"),
                     ("b", "bookmark"),
+                    ("u", "unread"),
                     ("o", "url"),
                     ("O", "hn"),
                     ("y", "copy url"),
                     ("v", "vote"),
                     ("c", "reply"),
-                    ("u", "profile"),
+                    ("p", "profile"),
                 ],
                 Pane::Comments => &[
                     ("j/k", "nav"),
                     ("Enter", "expand"),
                     ("Space", "collapse"),
                     ("Esc", "←back"),
+                    ("u", "unread"),
                     ("o", "url"),
                     ("O", "hn"),
                     ("y", "copy url"),
                     ("v", "vote"),
                     ("c", "reply"),
-                    ("u", "profile"),
+                    ("p", "profile"),
                 ],
             };
             let sep = Span::styled("  ", Style::default().fg(GRAY));
@@ -204,10 +207,13 @@ fn draw_story_list(f: &mut Frame, app: &App, area: Rect) {
             let ago = story.time_ago();
             let meta = format!(" ▲{} {} | {} comments{}", story.score(), story.display_by(), story.comment_count(), if ago.is_empty() { String::new() } else { format!(" | {ago}") });
 
+            let seen = app.seen_ids.contains(&story.id);
             let title_style = if selected {
                 Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)
+            } else if seen {
+                Style::default().fg(GRAY)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
             };
             let rank_style = if selected { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
             let bg = if selected { SELECTED_BG } else { Color::Reset };
@@ -600,20 +606,20 @@ mod render_tests {
     }
 
     #[test]
-    fn hints_stories_pane_shows_nav_and_copy() {
+    fn hints_stories_pane_shows_nav_and_bookmark() {
         let app = test_app(1);
         let screen = render(&app);
         assert!(screen.contains("j/k"), "nav hint missing");
-        assert!(screen.contains("copy url"), "copy url hint missing");
+        assert!(screen.contains("bookmark"), "bookmark hint missing");
     }
 
     #[test]
-    fn hints_comments_pane_shows_collapse_and_copy() {
+    fn hints_comments_pane_shows_collapse_and_back() {
         let mut app = test_app(1);
         app.active_pane = Pane::Comments;
         let screen = render(&app);
         assert!(screen.contains("collapse"), "collapse hint missing");
-        assert!(screen.contains("copy url"), "copy url hint missing");
+        assert!(screen.contains("←back"), "back hint missing");
     }
 
     #[test]
@@ -777,10 +783,11 @@ mod render_tests {
     // ── Bookmarks ─────────────────────────────────────────────────────────
 
     #[test]
-    fn header_shows_bookmarks_tab() {
+    fn header_shows_bookmarks_and_jobs_tabs() {
         let app = test_app(0);
         let screen = render(&app);
         assert!(screen.contains("Bookmarks"), "bookmarks tab missing from header");
+        assert!(screen.contains("Jobs"), "jobs tab missing from header");
     }
 
     #[test]
@@ -828,6 +835,25 @@ mod render_tests {
         let screen = render(&app);
         assert!(screen.contains("j/k"), "scroll hint missing");
         assert!(screen.contains("close"), "close label missing");
+    }
+
+    // ── Seen tracking ────────────────────────────────────────────────────
+
+    #[test]
+    fn header_shows_jobs_tab() {
+        let app = test_app(0);
+        let screen = render(&app);
+        assert!(screen.contains("Jobs"), "Jobs tab missing from header");
+    }
+
+    #[test]
+    fn seen_story_title_still_renders() {
+        use std::collections::HashSet;
+        let mut app = test_app(2);
+        app.seen_ids = HashSet::from([1u64]);
+        let screen = render(&app);
+        assert!(screen.contains("Story 1"), "seen story title should still appear");
+        assert!(screen.contains("Story 2"), "unseen story title should appear");
     }
 
     // ── Search ────────────────────────────────────────────────────────────

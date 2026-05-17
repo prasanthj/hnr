@@ -1,4 +1,4 @@
-use crate::api::{fetch_ask_ids, fetch_best_ids, fetch_new_ids, fetch_show_ids, fetch_top_ids, Item, User};
+use crate::api::{fetch_ask_ids, fetch_best_ids, fetch_job_ids, fetch_new_ids, fetch_show_ids, fetch_top_ids, Item, User};
 use crate::session::Session;
 use arboard::Clipboard;
 use std::collections::{HashMap, HashSet};
@@ -13,6 +13,7 @@ pub enum Feed {
     Best,
     Ask,
     Show,
+    Jobs,
     Bookmarks,
 }
 
@@ -24,6 +25,7 @@ impl Feed {
             Feed::Best => "Best",
             Feed::Ask => "Ask HN",
             Feed::Show => "Show HN",
+            Feed::Jobs => "Jobs",
             Feed::Bookmarks => "Bookmarks",
         }
     }
@@ -138,6 +140,9 @@ pub struct App {
     pub bookmark_ids: HashSet<u64>,
     pub bookmarks_path: PathBuf,
 
+    pub seen_ids: HashSet<u64>,
+    pub seen_path: PathBuf,
+
     pub search_input: String,
     pub search_query: Option<String>,
     pub search_base: String,
@@ -176,6 +181,11 @@ impl App {
                 crate::bookmarks::load(&p).iter().map(|b| b.id).collect()
             },
             bookmarks_path: crate::bookmarks::default_path(),
+            seen_ids: {
+                let p = crate::seen::default_path();
+                crate::seen::load(&p)
+            },
+            seen_path: crate::seen::default_path(),
             search_input: String::new(),
             search_query: None,
             search_base: "https://hn.algolia.com/api/v1".to_string(),
@@ -450,6 +460,7 @@ impl App {
             Feed::Best => fetch_best_ids(&client, &base).await,
             Feed::Ask  => fetch_ask_ids(&client, &base).await,
             Feed::Show => fetch_show_ids(&client, &base).await,
+            Feed::Jobs => fetch_job_ids(&client, &base).await,
             Feed::Bookmarks => unreachable!(),
         };
         match ids {
@@ -481,9 +492,23 @@ impl App {
         self.loading = false;
     }
 
+    pub fn mark_unseen(&mut self) {
+        if let Some(story) = self.selected_story() {
+            let id = story.id;
+            let title = story.display_title().to_string();
+            if self.seen_ids.remove(&id) {
+                crate::seen::save(&self.seen_path, &self.seen_ids);
+                self.status_message = format!("Marked unread: {title}");
+            }
+        }
+    }
+
     pub async fn load_comments(&mut self) {
         if let Some(story) = self.selected_story().cloned() {
             let story_id = story.id;
+            if self.seen_ids.insert(story_id) {
+                crate::seen::save(&self.seen_path, &self.seen_ids);
+            }
             let kids = story.kids.clone().unwrap_or_default();
             if kids.is_empty() {
                 self.status_message = "No comments.".into();
@@ -926,6 +951,7 @@ mod tests {
         assert_eq!(Feed::Best.label(), "Best");
         assert_eq!(Feed::Ask.label(), "Ask HN");
         assert_eq!(Feed::Show.label(), "Show HN");
+        assert_eq!(Feed::Jobs.label(), "Jobs");
         assert_eq!(Feed::Bookmarks.label(), "Bookmarks");
     }
 
@@ -1182,6 +1208,43 @@ mod tests {
         assert_eq!(app.comment_detail_scroll, 0);
     }
 
+    // ── seen tracking ─────────────────────────────────────────────────────
+
+    fn make_app_with_temp_seen(n: usize) -> (App, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = make_app_with_stories(n);
+        app.seen_path = dir.path().join("seen.json");
+        app.seen_ids = HashSet::new();
+        (app, dir)
+    }
+
+    #[test]
+    fn mark_unseen_removes_from_seen_ids_and_saves() {
+        let (mut app, dir) = make_app_with_temp_seen(1);
+        app.seen_ids.insert(1);
+        crate::seen::save(&app.seen_path, &app.seen_ids);
+        app.mark_unseen();
+        assert!(!app.seen_ids.contains(&1));
+        assert!(app.status_message.contains("unread"), "got: {}", app.status_message);
+        let on_disk = crate::seen::load(&dir.path().join("seen.json"));
+        assert!(!on_disk.contains(&1));
+    }
+
+    #[test]
+    fn mark_unseen_noop_when_story_not_seen() {
+        let (mut app, _dir) = make_app_with_temp_seen(1);
+        let prev = app.status_message.clone();
+        app.mark_unseen();
+        assert!(app.seen_ids.is_empty());
+        assert_eq!(app.status_message, prev, "status should not change");
+    }
+
+    #[test]
+    fn mark_unseen_noop_when_no_stories() {
+        let (mut app, _dir) = make_app_with_temp_seen(0);
+        app.mark_unseen(); // should not panic
+    }
+
     // ── start_search / run_search ─────────────────────────────────────────
 
     #[test]
@@ -1358,6 +1421,32 @@ mod integration_tests {
             "got: {}",
             app.status_message
         );
+    }
+
+    #[tokio::test]
+    async fn load_comments_marks_story_as_seen() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/item/10.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10, "type": "comment", "text": "hi", "by": "alice",
+            })))
+            .mount(&server)
+            .await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = test_app(&server.uri());
+        app.seen_path = dir.path().join("seen.json");
+        app.seen_ids = HashSet::new();
+        let mut story = make_item(1);
+        story.kids = Some(vec![10]);
+        app.stories = vec![story];
+
+        app.load_comments().await;
+
+        assert!(app.seen_ids.contains(&1), "story should be seen after loading comments");
+        let on_disk = crate::seen::load(&dir.path().join("seen.json"));
+        assert!(on_disk.contains(&1), "seen state should persist to disk");
     }
 
     fn test_search_app(search_base: &str) -> App {

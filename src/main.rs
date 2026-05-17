@@ -1,6 +1,7 @@
 mod api;
 mod app;
 mod bookmarks;
+mod seen;
 mod session;
 mod ui;
 
@@ -189,7 +190,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     match code {
         KeyCode::Char('h') => {
             app.status_message =
-                "1-6:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  y:copy  v:vote  c:reply  u:profile  b:bookmark  ?:search  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
+                "1-7:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  y:copy  v:vote  c:reply  p:profile  u:unread  b:bookmark  ?:search  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
                     .into();
             return;
         }
@@ -207,7 +208,8 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
         KeyCode::Char('3') => { switch_feed(app, Feed::Best).await; return; }
         KeyCode::Char('4') => { switch_feed(app, Feed::Ask).await; return; }
         KeyCode::Char('5') => { switch_feed(app, Feed::Show).await; return; }
-        KeyCode::Char('6') => { switch_feed(app, Feed::Bookmarks).await; return; }
+        KeyCode::Char('6') => { switch_feed(app, Feed::Jobs).await; return; }
+        KeyCode::Char('7') => { switch_feed(app, Feed::Bookmarks).await; return; }
         _ => {}
     }
 
@@ -225,11 +227,12 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
                     app.active_pane = Pane::Comments;
                 }
             }
-            KeyCode::Char('u') => {
+            KeyCode::Char('p') => {
                 if let Some(name) = app.username_at_cursor() {
                     app.load_user(name).await;
                 }
             }
+            KeyCode::Char('u') => app.mark_unseen(),
             KeyCode::Char('b') => app.toggle_bookmark(),
             KeyCode::Char('v') => app.vote_current().await,
             KeyCode::Char('c') => app.start_compose().await,
@@ -247,11 +250,12 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
                 app.save_comment_pos();
                 app.active_pane = Pane::Stories;
             }
-            KeyCode::Char('u') => {
+            KeyCode::Char('p') => {
                 if let Some(name) = app.username_at_cursor() {
                     app.load_user(name).await;
                 }
             }
+            KeyCode::Char('u') => app.mark_unseen(),
             KeyCode::Char('b') => app.toggle_bookmark(),
             KeyCode::Char('v') => app.vote_current().await,
             KeyCode::Char('c') => app.start_compose().await,
@@ -299,14 +303,15 @@ async fn run_command(app: &mut App, cmd: &str) {
         "best" | "3"          => switch_feed(app, Feed::Best).await,
         "ask"  | "4"          => switch_feed(app, Feed::Ask).await,
         "show"      | "5"      => switch_feed(app, Feed::Show).await,
-        "bookmarks" | "6"      => switch_feed(app, Feed::Bookmarks).await,
+        "jobs"      | "6"      => switch_feed(app, Feed::Jobs).await,
+        "bookmarks" | "7"      => switch_feed(app, Feed::Bookmarks).await,
         "bookmark"  | "b"      => app.toggle_bookmark(),
         "search"    | "s"      => app.start_search(),
         "refresh"   | "r"      => app.load_feed().await,
         "open" | "o"          => app.open_story_in_browser(),
         "hn"                  => app.open_hn_page_in_browser(),
         "vote" | "v"          => app.vote_current().await,
-        "user" | "u" => {
+        "user" | "u" | "p" => {
             let name = if arg.is_empty() { app.username_at_cursor() } else { Some(arg.to_string()) };
             if let Some(name) = name {
                 app.load_user(name).await;
