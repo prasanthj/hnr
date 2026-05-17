@@ -2,7 +2,7 @@
 
 ### A terminal UI for Hacker News
 
-Browse stories, read threaded comments, search, vote, reply, and bookmark — all without leaving the terminal. Built with Rust and [ratatui](https://ratatui.rs).
+Browse stories, read threaded comments, search, vote, reply, and bookmark — all without leaving the terminal. Built with Rust and [ratatui](https://ratatui.rs). Mostly vibe coded with Claude Code over a weekend.
 
 ## Features
 
