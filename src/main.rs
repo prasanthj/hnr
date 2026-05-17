@@ -41,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
                 Mode::Login => handle_login_keys(&mut app, key.code, key.modifiers).await,
                 Mode::Compose => handle_compose_keys(&mut app, key.code, key.modifiers).await,
                 Mode::Command => handle_command_keys(&mut app, key.code).await,
+                Mode::CommentDetail => handle_comment_detail_keys(&mut app, key.code),
                 Mode::Normal => {
                     let h = terminal.size()?.height as usize;
                     handle_normal_keys(&mut app, key.code, key.modifiers, h).await;
@@ -168,7 +169,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     match code {
         KeyCode::Char('h') => {
             app.status_message =
-                "1-5:feeds  j/k:nav  Enter:comments  Tab/Esc:pane  Space:collapse  y:copy url  v:vote  c:reply  u:profile  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
+                "1-5:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  y:copy  v:vote  c:reply  u:profile  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
                     .into();
             return;
         }
@@ -218,6 +219,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
         Pane::Comments => match code {
             KeyCode::Char('j') | KeyCode::Down  => app.scroll_comment_down(visible),
             KeyCode::Char('k') | KeyCode::Up    => app.scroll_comment_up(),
+            KeyCode::Enter                       => app.open_comment_detail(),
             KeyCode::Char(' ')                   => app.toggle_current_comment(),
             KeyCode::Tab | KeyCode::Esc          => {
                 app.save_comment_pos();
@@ -235,6 +237,19 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('y') => app.copy_url_to_clipboard(),
             _ => {}
         },
+    }
+}
+
+fn handle_comment_detail_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc | KeyCode::Char('q') => app.close_comment_detail(),
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.comment_detail_scroll = app.comment_detail_scroll.saturating_add(1);
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.comment_detail_scroll = app.comment_detail_scroll.saturating_sub(1);
+        }
+        _ => {}
     }
 }
 

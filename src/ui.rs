@@ -32,6 +32,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     match app.mode {
         Mode::Login => draw_login_overlay(f, app, area),
         Mode::Compose => draw_compose_overlay(f, app, area),
+        Mode::CommentDetail => draw_comment_detail_overlay(f, app, area),
         _ => {}
     }
 }
@@ -103,6 +104,12 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Esc", Style::default().fg(ORANGE)),
             Span::styled(" cancel", Style::default().fg(GRAY)),
         ],
+        Mode::CommentDetail => vec![
+            Span::styled(" j/k", Style::default().fg(ORANGE)),
+            Span::styled(" scroll  ", Style::default().fg(GRAY)),
+            Span::styled("Esc", Style::default().fg(ORANGE)),
+            Span::styled(" close", Style::default().fg(GRAY)),
+        ],
         Mode::Normal => {
             let login_hint = if app.session.is_some() { "logout" } else { "login" };
             // global + pane-specific, every shortcut unique
@@ -127,6 +134,7 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                 ],
                 Pane::Comments => &[
                     ("j/k", "nav"),
+                    ("Enter", "expand"),
                     ("Space", "collapse"),
                     ("Esc", "←back"),
                     ("o", "url"),
@@ -484,6 +492,33 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(p, area);
 }
 
+fn draw_comment_detail_overlay(f: &mut Frame, app: &App, area: Rect) {
+    if let Some((author, text)) = &app.comment_detail {
+        let popup = centered_rect(82, 72, area);
+        f.render_widget(Clear, popup);
+
+        let lines: Vec<Line> = text
+            .lines()
+            .map(|l| Line::from(Span::styled(l.to_string(), Style::default().fg(Color::White))))
+            .collect();
+
+        let p = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .title(format!(" {} ", author))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(ORANGE))
+                    .title_bottom(Line::from(Span::styled(
+                        " j/k scroll  ·  Esc close ",
+                        Style::default().fg(GRAY),
+                    ))),
+            )
+            .scroll((app.comment_detail_scroll as u16, 0))
+            .wrap(Wrap { trim: false });
+        f.render_widget(p, popup);
+    }
+}
+
 #[cfg(test)]
 mod render_tests {
     use super::*;
@@ -718,6 +753,29 @@ mod render_tests {
         app.comments = vec![root];
         let screen = render(&app);
         assert!(screen.contains("[+]"), "expand marker missing for collapsed comment");
+    }
+
+    // ── Comment detail overlay ────────────────────────────────────────────
+
+    #[test]
+    fn comment_detail_overlay_renders_author_and_text() {
+        let mut app = test_app(1);
+        app.mode = Mode::CommentDetail;
+        app.comment_detail = Some(("alice".into(), "Rust is amazing for systems programming.".into()));
+        let screen = render(&app);
+        assert!(screen.contains("alice"), "author missing from overlay");
+        assert!(screen.contains("Rust is amazing"), "text missing from overlay");
+        assert!(screen.contains("Esc"), "close hint missing");
+    }
+
+    #[test]
+    fn comment_detail_hints_show_scroll_and_close() {
+        let mut app = test_app(0);
+        app.mode = Mode::CommentDetail;
+        app.comment_detail = Some(("bob".into(), "some text".into()));
+        let screen = render(&app);
+        assert!(screen.contains("j/k"), "scroll hint missing");
+        assert!(screen.contains("close"), "close label missing");
     }
 
     #[test]

@@ -78,6 +78,7 @@ pub enum Mode {
     Command,
     Login,
     Compose,
+    CommentDetail,
 }
 
 #[derive(Clone)]
@@ -127,6 +128,9 @@ pub struct App {
     pub login_state: LoginState,
     pub compose_state: Option<ComposeState>,
 
+    pub comment_detail: Option<(String, String)>, // (author, plain text)
+    pub comment_detail_scroll: usize,
+
     pub loading: bool,
     pub client: reqwest::Client,
     pub api_base: String,
@@ -154,6 +158,8 @@ impl App {
             session: Session::load(),
             login_state: LoginState::new(),
             compose_state: None,
+            comment_detail: None,
+            comment_detail_scroll: 0,
             loading: false,
             client,
             api_base: HN_API_BASE.to_string(),
@@ -462,6 +468,32 @@ impl App {
                 self.comments.len()
             );
         }
+    }
+
+    pub fn open_comment_detail(&mut self) {
+        let data = {
+            let flat = self.flat_comments();
+            flat.get(self.comment_cursor).map(|(node, _)| {
+                (node.item.display_by().to_string(), node.item.text_plain())
+            })
+        };
+        match data {
+            None => {}
+            Some((_, ref text)) if text.trim().is_empty() => {
+                self.status_message = "No text for this comment.".into();
+            }
+            Some((author, text)) => {
+                self.comment_detail = Some((author, text));
+                self.comment_detail_scroll = 0;
+                self.mode = Mode::CommentDetail;
+            }
+        }
+    }
+
+    pub fn close_comment_detail(&mut self) {
+        self.comment_detail = None;
+        self.comment_detail_scroll = 0;
+        self.mode = Mode::Normal;
     }
 
     pub fn save_comment_pos(&mut self) {
@@ -944,6 +976,53 @@ mod tests {
         app.logout();
         assert!(app.session.is_none());
         assert!(app.status_message.contains("Logged out"), "got: {}", app.status_message);
+    }
+
+    // ── open/close_comment_detail ─────────────────────────────────────────
+
+    #[test]
+    fn open_comment_detail_sets_mode_and_captures_text() {
+        let mut app = make_app_with_stories(1);
+        let mut item = make_item(100);
+        item.text = Some("<p>Hello <b>world</b></p>".into());
+        app.comments = vec![CommentNode::new(item, 0)];
+        app.comment_cursor = 0;
+        app.open_comment_detail();
+        assert_eq!(app.mode, Mode::CommentDetail);
+        let (author, text) = app.comment_detail.as_ref().unwrap();
+        assert_eq!(author, "user100");
+        assert!(text.contains("Hello") && text.contains("world"), "html not stripped: {text}");
+    }
+
+    #[test]
+    fn open_comment_detail_noop_when_text_empty() {
+        let mut app = make_app_with_stories(1);
+        // make_item has text: None → text_plain() returns ""
+        app.comments = vec![CommentNode::new(make_item(100), 0)];
+        app.comment_cursor = 0;
+        app.open_comment_detail();
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.comment_detail.is_none());
+        assert!(app.status_message.contains("No text"), "got: {}", app.status_message);
+    }
+
+    #[test]
+    fn open_comment_detail_noop_when_no_comments() {
+        let mut app = make_app_with_stories(1);
+        app.open_comment_detail(); // should not panic
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn close_comment_detail_resets_all_state() {
+        let mut app = make_app_with_stories(1);
+        app.mode = Mode::CommentDetail;
+        app.comment_detail = Some(("alice".into(), "text".into()));
+        app.comment_detail_scroll = 7;
+        app.close_comment_detail();
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.comment_detail.is_none());
+        assert_eq!(app.comment_detail_scroll, 0);
     }
 
     // ── close_user_profile ────────────────────────────────────────────────
