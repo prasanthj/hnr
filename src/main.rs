@@ -6,7 +6,6 @@ mod session;
 mod ui;
 
 use app::{App, Feed, LoginField, Mode, Pane, ViewMode};
-use std::cmp;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -288,21 +287,11 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
 }
 
 fn handle_reader_keys(app: &mut App, code: KeyCode) {
-    let content_lines = app.reader_content.as_ref().map(|c| c.text.lines().count()).unwrap_or(0);
-    let visible = 40usize; // approximate; exact height not available here
     match code {
-        KeyCode::Char('j') | KeyCode::Down => {
-            app.reader_scroll = cmp::min(app.reader_scroll + 1, content_lines.saturating_sub(visible));
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
-            app.reader_scroll = app.reader_scroll.saturating_sub(1);
-        }
-        KeyCode::Char('d') => {
-            app.reader_scroll = cmp::min(app.reader_scroll + 20, content_lines.saturating_sub(visible));
-        }
-        KeyCode::Char('u') => {
-            app.reader_scroll = app.reader_scroll.saturating_sub(20);
-        }
+        KeyCode::Char('j') | KeyCode::Down => app.reader_scroll += 1,
+        KeyCode::Char('k') | KeyCode::Up => app.reader_scroll = app.reader_scroll.saturating_sub(1),
+        KeyCode::Char('d') => app.reader_scroll += 20,
+        KeyCode::Char('u') => app.reader_scroll = app.reader_scroll.saturating_sub(20),
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('r') => app.close_reader(),
         _ => {}
     }

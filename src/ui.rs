@@ -583,18 +583,10 @@ fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scrol
     let inner = block.inner(popup);
     f.render_widget(block, popup);
 
-    let width = inner.width as usize;
-    let lines: Vec<Line> = content
-        .text
-        .lines()
-        .skip(scroll)
-        .take(inner.height as usize)
-        .map(|l| {
-            let trimmed = l.chars().take(width).collect::<String>();
-            Line::from(Span::styled(trimmed, Style::default().fg(Color::White)))
-        })
-        .collect();
-    let p = Paragraph::new(lines).style(Style::default().bg(DARK));
+    let p = Paragraph::new(content.text.as_str())
+        .style(Style::default().fg(Color::White).bg(DARK))
+        .wrap(Wrap { trim: true })
+        .scroll((scroll as u16, 0));
     f.render_widget(p, inner);
 }
 
