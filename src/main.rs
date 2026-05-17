@@ -44,7 +44,6 @@ async fn main() -> anyhow::Result<()> {
                 Mode::Compose => handle_compose_keys(&mut app, key.code, key.modifiers).await,
                 Mode::Command => handle_command_keys(&mut app, key.code).await,
                 Mode::Search => handle_search_keys(&mut app, key.code).await,
-                Mode::CommentDetail => handle_comment_detail_keys(&mut app, key.code),
                 Mode::Normal => {
                     let h = terminal.size()?.height as usize;
                     handle_normal_keys(&mut app, key.code, key.modifiers, h).await;
@@ -244,7 +243,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
         Pane::Comments => match code {
             KeyCode::Char('j') | KeyCode::Down  => app.scroll_comment_down(visible),
             KeyCode::Char('k') | KeyCode::Up    => app.scroll_comment_up(),
-            KeyCode::Enter                       => app.open_comment_detail(),
+            KeyCode::Enter                       => app.toggle_comment_expand(),
             KeyCode::Char(' ')                   => app.toggle_current_comment(),
             KeyCode::Tab | KeyCode::Esc          => {
                 app.save_comment_pos();
@@ -267,18 +266,6 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     }
 }
 
-fn handle_comment_detail_keys(app: &mut App, code: KeyCode) {
-    match code {
-        KeyCode::Esc | KeyCode::Char('q') => app.close_comment_detail(),
-        KeyCode::Char('j') | KeyCode::Down => {
-            app.comment_detail_scroll = app.comment_detail_scroll.saturating_add(1);
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
-            app.comment_detail_scroll = app.comment_detail_scroll.saturating_sub(1);
-        }
-        _ => {}
-    }
-}
 
 async fn switch_feed(app: &mut App, feed: Feed) {
     if app.feed != feed || app.search_query.is_some() {

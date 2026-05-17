@@ -83,7 +83,6 @@ pub enum Mode {
     Command,
     Login,
     Compose,
-    CommentDetail,
     Search,
 }
 
@@ -134,8 +133,7 @@ pub struct App {
     pub login_state: LoginState,
     pub compose_state: Option<ComposeState>,
 
-    pub comment_detail: Option<(String, String)>, // (author, plain text)
-    pub comment_detail_scroll: usize,
+    pub expanded_comment: Option<u64>,
 
     pub bookmark_ids: HashSet<u64>,
     pub bookmarks_path: PathBuf,
@@ -174,8 +172,7 @@ impl App {
             session: Session::load(),
             login_state: LoginState::new(),
             compose_state: None,
-            comment_detail: None,
-            comment_detail_scroll: 0,
+            expanded_comment: None,
             bookmark_ids: {
                 let p = crate::bookmarks::default_path();
                 crate::bookmarks::load(&p).iter().map(|b| b.id).collect()
@@ -509,6 +506,7 @@ impl App {
             if self.seen_ids.insert(story_id) {
                 crate::seen::save(&self.seen_path, &self.seen_ids);
             }
+            self.expanded_comment = None;
             let kids = story.kids.clone().unwrap_or_default();
             if kids.is_empty() {
                 self.status_message = "No comments.".into();
@@ -589,30 +587,18 @@ impl App {
         }
     }
 
-    pub fn open_comment_detail(&mut self) {
-        let data = {
+    pub fn toggle_comment_expand(&mut self) {
+        let id = {
             let flat = self.flat_comments();
-            flat.get(self.comment_cursor).map(|(node, _)| {
-                (node.item.display_by().to_string(), node.item.text_plain())
-            })
+            flat.get(self.comment_cursor).map(|(node, _)| node.item.id)
         };
-        match data {
-            None => {}
-            Some((_, ref text)) if text.trim().is_empty() => {
-                self.status_message = "No text for this comment.".into();
-            }
-            Some((author, text)) => {
-                self.comment_detail = Some((author, text));
-                self.comment_detail_scroll = 0;
-                self.mode = Mode::CommentDetail;
+        if let Some(id) = id {
+            if self.expanded_comment == Some(id) {
+                self.expanded_comment = None;
+            } else {
+                self.expanded_comment = Some(id);
             }
         }
-    }
-
-    pub fn close_comment_detail(&mut self) {
-        self.comment_detail = None;
-        self.comment_detail_scroll = 0;
-        self.mode = Mode::Normal;
     }
 
     pub fn save_comment_pos(&mut self) {
@@ -1161,51 +1147,41 @@ mod tests {
         assert!(app.status_message.contains("No bookmarks"), "got: {}", app.status_message);
     }
 
-    // ── open/close_comment_detail ─────────────────────────────────────────
+    // ── toggle_comment_expand ─────────────────────────────────────────────
 
     #[test]
-    fn open_comment_detail_sets_mode_and_captures_text() {
+    fn toggle_comment_expand_sets_and_clears_expanded() {
         let mut app = make_app_with_stories(1);
         let mut item = make_item(100);
-        item.text = Some("<p>Hello <b>world</b></p>".into());
+        item.text = Some("<p>Hello world</p>".into());
         app.comments = vec![CommentNode::new(item, 0)];
         app.comment_cursor = 0;
-        app.open_comment_detail();
-        assert_eq!(app.mode, Mode::CommentDetail);
-        let (author, text) = app.comment_detail.as_ref().unwrap();
-        assert_eq!(author, "user100");
-        assert!(text.contains("Hello") && text.contains("world"), "html not stripped: {text}");
+        app.toggle_comment_expand();
+        assert_eq!(app.expanded_comment, Some(100));
+        app.toggle_comment_expand();
+        assert!(app.expanded_comment.is_none());
     }
 
     #[test]
-    fn open_comment_detail_noop_when_text_empty() {
+    fn toggle_comment_expand_switches_to_different_comment() {
         let mut app = make_app_with_stories(1);
-        // make_item has text: None → text_plain() returns ""
-        app.comments = vec![CommentNode::new(make_item(100), 0)];
+        app.comments = vec![
+            CommentNode::new(make_item(100), 0),
+            CommentNode::new(make_item(101), 0),
+        ];
         app.comment_cursor = 0;
-        app.open_comment_detail();
-        assert_eq!(app.mode, Mode::Normal);
-        assert!(app.comment_detail.is_none());
-        assert!(app.status_message.contains("No text"), "got: {}", app.status_message);
+        app.toggle_comment_expand();
+        assert_eq!(app.expanded_comment, Some(100));
+        app.comment_cursor = 1;
+        app.toggle_comment_expand();
+        assert_eq!(app.expanded_comment, Some(101));
     }
 
     #[test]
-    fn open_comment_detail_noop_when_no_comments() {
+    fn toggle_comment_expand_noop_when_no_comments() {
         let mut app = make_app_with_stories(1);
-        app.open_comment_detail(); // should not panic
-        assert_eq!(app.mode, Mode::Normal);
-    }
-
-    #[test]
-    fn close_comment_detail_resets_all_state() {
-        let mut app = make_app_with_stories(1);
-        app.mode = Mode::CommentDetail;
-        app.comment_detail = Some(("alice".into(), "text".into()));
-        app.comment_detail_scroll = 7;
-        app.close_comment_detail();
-        assert_eq!(app.mode, Mode::Normal);
-        assert!(app.comment_detail.is_none());
-        assert_eq!(app.comment_detail_scroll, 0);
+        app.toggle_comment_expand(); // should not panic
+        assert!(app.expanded_comment.is_none());
     }
 
     // ── seen tracking ─────────────────────────────────────────────────────

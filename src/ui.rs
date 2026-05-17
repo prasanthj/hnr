@@ -32,7 +32,6 @@ pub fn draw(f: &mut Frame, app: &App) {
     match app.mode {
         Mode::Login => draw_login_overlay(f, app, area),
         Mode::Compose => draw_compose_overlay(f, app, area),
-        Mode::CommentDetail => draw_comment_detail_overlay(f, app, area),
         _ => {}
     }
 }
@@ -106,12 +105,6 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Esc", Style::default().fg(ORANGE)),
             Span::styled(" cancel", Style::default().fg(GRAY)),
         ],
-        Mode::CommentDetail => vec![
-            Span::styled(" j/k", Style::default().fg(ORANGE)),
-            Span::styled(" scroll  ", Style::default().fg(GRAY)),
-            Span::styled("Esc", Style::default().fg(ORANGE)),
-            Span::styled(" close", Style::default().fg(GRAY)),
-        ],
         Mode::Search => vec![
             Span::styled(" Type", Style::default().fg(ORANGE)),
             Span::styled(" to search  ", Style::default().fg(GRAY)),
@@ -146,8 +139,8 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                 ],
                 Pane::Comments => &[
                     ("j/k", "nav"),
-                    ("Enter", "expand"),
-                    ("Space", "collapse"),
+                    ("Enter", "expand/collapse"),
+                    ("Space", "thread collapse"),
                     ("Esc", "←back"),
                     ("u", "unread"),
                     ("o", "url"),
@@ -328,20 +321,39 @@ fn draw_comments(f: &mut Frame, app: &App, area: Rect, focused: bool) {
             };
 
             let text = node.item.text_plain();
-            let preview: String = text
-                .lines()
-                .next()
-                .unwrap_or("")
-                .chars()
-                .take(area.width as usize - depth * 2 - 4)
-                .collect();
-
             let bg = if selected { SELECTED_BG } else { Color::Reset };
-            ListItem::new(ratatui::text::Text::from(vec![
-                Line::from(Span::styled(header, header_style)),
-                Line::from(vec![Span::raw(format!("{indent}  ")), Span::styled(preview, Style::default().fg(Color::White))]),
-            ]))
-            .style(Style::default().bg(bg))
+            let is_expanded = app.expanded_comment == Some(node.item.id);
+
+            let mut item_lines = vec![Line::from(Span::styled(header, header_style))];
+            if is_expanded {
+                if text.trim().is_empty() {
+                    item_lines.push(Line::from(vec![
+                        Span::raw(format!("{indent}  ")),
+                        Span::styled("[no text]", Style::default().fg(GRAY)),
+                    ]));
+                } else {
+                    for line in text.lines() {
+                        item_lines.push(Line::from(vec![
+                            Span::raw(format!("{indent}  ")),
+                            Span::styled(line.to_string(), Style::default().fg(Color::White)),
+                        ]));
+                    }
+                }
+            } else {
+                let preview: String = text
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .chars()
+                    .take(area.width as usize - depth * 2 - 4)
+                    .collect();
+                item_lines.push(Line::from(vec![
+                    Span::raw(format!("{indent}  ")),
+                    Span::styled(preview, Style::default().fg(Color::White)),
+                ]));
+            }
+
+            ListItem::new(ratatui::text::Text::from(item_lines)).style(Style::default().bg(bg))
         })
         .collect();
 
@@ -517,32 +529,6 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(p, area);
 }
 
-fn draw_comment_detail_overlay(f: &mut Frame, app: &App, area: Rect) {
-    if let Some((author, text)) = &app.comment_detail {
-        let popup = centered_rect(82, 72, area);
-        f.render_widget(Clear, popup);
-
-        let lines: Vec<Line> = text
-            .lines()
-            .map(|l| Line::from(Span::styled(l.to_string(), Style::default().fg(Color::White))))
-            .collect();
-
-        let p = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .title(format!(" {} ", author))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(ORANGE))
-                    .title_bottom(Line::from(Span::styled(
-                        " j/k scroll  ·  Esc close ",
-                        Style::default().fg(GRAY),
-                    ))),
-            )
-            .scroll((app.comment_detail_scroll as u16, 0))
-            .wrap(Wrap { trim: false });
-        f.render_widget(p, popup);
-    }
-}
 
 #[cfg(test)]
 mod render_tests {
@@ -814,27 +800,32 @@ mod render_tests {
         assert!(screen.contains("Bookmarks"), "Bookmarks not in story list title");
     }
 
-    // ── Comment detail overlay ────────────────────────────────────────────
+    // ── Expand in place ───────────────────────────────────────────────────
 
     #[test]
-    fn comment_detail_overlay_renders_author_and_text() {
+    fn expanded_comment_shows_full_text_inline() {
+        use crate::app::CommentNode;
         let mut app = test_app(1);
-        app.mode = Mode::CommentDetail;
-        app.comment_detail = Some(("alice".into(), "Rust is amazing for systems programming.".into()));
+        app.active_pane = Pane::Comments;
+        let mut item = make_item(100);
+        item.text = Some("<p>Rust is amazing for systems programming.</p>".into());
+        app.comments = vec![CommentNode::new(item, 0)];
+        app.expanded_comment = Some(100);
         let screen = render(&app);
-        assert!(screen.contains("alice"), "author missing from overlay");
-        assert!(screen.contains("Rust is amazing"), "text missing from overlay");
-        assert!(screen.contains("Esc"), "close hint missing");
+        assert!(screen.contains("Rust is amazing"), "full text not shown when expanded");
     }
 
     #[test]
-    fn comment_detail_hints_show_scroll_and_close() {
-        let mut app = test_app(0);
-        app.mode = Mode::CommentDetail;
-        app.comment_detail = Some(("bob".into(), "some text".into()));
+    fn collapsed_comment_shows_only_preview() {
+        use crate::app::CommentNode;
+        let mut app = test_app(1);
+        app.active_pane = Pane::Comments;
+        let mut item = make_item(100);
+        item.text = Some("<p>First line.</p><p>Second line should not appear.</p>".into());
+        app.comments = vec![CommentNode::new(item, 0)];
+        app.expanded_comment = None;
         let screen = render(&app);
-        assert!(screen.contains("j/k"), "scroll hint missing");
-        assert!(screen.contains("close"), "close label missing");
+        assert!(screen.contains("First line"), "preview line missing");
     }
 
     // ── Seen tracking ────────────────────────────────────────────────────
