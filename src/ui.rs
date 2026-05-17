@@ -111,6 +111,14 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Esc", Style::default().fg(ORANGE)),
             Span::styled(" close", Style::default().fg(GRAY)),
         ],
+        Mode::Search => vec![
+            Span::styled(" Type", Style::default().fg(ORANGE)),
+            Span::styled(" to search  ", Style::default().fg(GRAY)),
+            Span::styled("Enter", Style::default().fg(ORANGE)),
+            Span::styled(" run  ", Style::default().fg(GRAY)),
+            Span::styled("Esc", Style::default().fg(ORANGE)),
+            Span::styled(" cancel", Style::default().fg(GRAY)),
+        ],
         Mode::Normal => {
             let login_hint = if app.session.is_some() { "logout" } else { "login" };
             // global + pane-specific, every shortcut unique
@@ -224,9 +232,14 @@ fn draw_story_list(f: &mut Frame, app: &App, area: Rect) {
         state.select(Some(app.story_cursor.saturating_sub(app.story_scroll)));
     }
 
+    let title = if let Some(q) = &app.search_query {
+        format!(" Search: {q} ")
+    } else {
+        format!(" {} Stories ", app.feed.label())
+    };
     let list = List::new(items).block(
         Block::default()
-            .title(format!(" {} Stories ", app.feed.label()))
+            .title(title)
             .borders(Borders::ALL)
             .border_style(border_style),
     );
@@ -482,6 +495,8 @@ fn draw_compose_overlay(f: &mut Frame, app: &App, area: Rect) {
 fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     let p = match app.mode {
         Mode::Command => Paragraph::new(format!(":{}", app.command_input))
+            .style(Style::default().fg(Color::White).bg(DARK)),
+        Mode::Search => Paragraph::new(format!("?{}", app.search_input))
             .style(Style::default().fg(Color::White).bg(DARK)),
         _ => {
             let style = if app.loading {
@@ -813,6 +828,42 @@ mod render_tests {
         let screen = render(&app);
         assert!(screen.contains("j/k"), "scroll hint missing");
         assert!(screen.contains("close"), "close label missing");
+    }
+
+    // ── Search ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn search_mode_status_bar_shows_query_input() {
+        let mut app = test_app(0);
+        app.mode = Mode::Search;
+        app.search_input = "rust async".into();
+        let screen = render(&app);
+        assert!(screen.contains("?rust async"), "search input not shown in status bar");
+    }
+
+    #[test]
+    fn search_mode_hints_show_type_and_enter() {
+        let mut app = test_app(0);
+        app.mode = Mode::Search;
+        let screen = render(&app);
+        assert!(screen.contains("Enter"), "Enter hint missing in search mode");
+        assert!(screen.contains("cancel"), "cancel hint missing in search mode");
+    }
+
+    #[test]
+    fn story_list_title_shows_search_query_when_active() {
+        let mut app = test_app(2);
+        app.search_query = Some("rust".into());
+        let screen = render(&app);
+        assert!(screen.contains("Search: rust"), "search query not shown in story list title");
+    }
+
+    #[test]
+    fn story_list_title_shows_feed_name_when_no_search() {
+        let app = test_app(1);
+        let screen = render(&app);
+        assert!(screen.contains("Top Stories"), "feed name not shown without search");
+        assert!(!screen.contains("Search:"), "unexpected search prefix without search query");
     }
 
     #[test]

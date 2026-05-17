@@ -335,6 +335,59 @@ mod tests {
     }
 }
 
+#[derive(Deserialize)]
+struct AlgoliaHit {
+    #[serde(rename = "objectID")]
+    object_id: String,
+    title: Option<String>,
+    url: Option<String>,
+    author: Option<String>,
+    points: Option<i64>,
+    num_comments: Option<u64>,
+    created_at_i: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct AlgoliaResponse {
+    hits: Vec<AlgoliaHit>,
+}
+
+impl AlgoliaHit {
+    fn into_item(self) -> Option<Item> {
+        let id = self.object_id.parse::<u64>().ok()?;
+        Some(Item {
+            id,
+            kind: Some("story".into()),
+            title: self.title,
+            url: self.url,
+            text: None,
+            by: self.author,
+            score: self.points,
+            time: self.created_at_i,
+            descendants: self.num_comments,
+            kids: None,
+            parent: None,
+            deleted: None,
+            dead: None,
+        })
+    }
+}
+
+pub async fn search_stories(
+    client: &reqwest::Client,
+    query: &str,
+    base: &str,
+) -> anyhow::Result<Vec<Item>> {
+    let resp: AlgoliaResponse = client
+        .get(format!("{base}/search"))
+        .query(&[("query", query), ("tags", "story"), ("hitsPerPage", "30")])
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(resp.hits.into_iter().filter_map(|h| h.into_item()).collect())
+}
+
 pub async fn fetch_user(client: &reqwest::Client, username: &str, base: &str) -> anyhow::Result<User> {
     let user: User = client
         .get(format!("{base}/user/{username}.json"))

@@ -42,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
                 Mode::Login => handle_login_keys(&mut app, key.code, key.modifiers).await,
                 Mode::Compose => handle_compose_keys(&mut app, key.code, key.modifiers).await,
                 Mode::Command => handle_command_keys(&mut app, key.code).await,
+                Mode::Search => handle_search_keys(&mut app, key.code).await,
                 Mode::CommentDetail => handle_comment_detail_keys(&mut app, key.code),
                 Mode::Normal => {
                     let h = terminal.size()?.height as usize;
@@ -142,12 +143,30 @@ async fn handle_command_keys(app: &mut App, code: KeyCode) {
     }
 }
 
+async fn handle_search_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            app.mode = Mode::Normal;
+            app.search_input.clear();
+            app.status_message = "Search cancelled.".into();
+        }
+        KeyCode::Enter => app.run_search().await,
+        KeyCode::Backspace => { app.search_input.pop(); }
+        KeyCode::Char(c) => app.search_input.push(c),
+        _ => {}
+    }
+}
+
 async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, height: usize) {
     if code == KeyCode::Char('c') && mods.contains(KeyModifiers::CONTROL) {
         std::process::exit(0);
     }
     if code == KeyCode::Char('/') {
         app.mode = Mode::Command;
+        return;
+    }
+    if code == KeyCode::Char('?') {
+        app.start_search();
         return;
     }
 
@@ -170,7 +189,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     match code {
         KeyCode::Char('h') => {
             app.status_message =
-                "1-5:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  y:copy  v:vote  c:reply  u:profile  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
+                "1-6:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  y:copy  v:vote  c:reply  u:profile  b:bookmark  ?:search  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
                     .into();
             return;
         }
@@ -258,8 +277,9 @@ fn handle_comment_detail_keys(app: &mut App, code: KeyCode) {
 }
 
 async fn switch_feed(app: &mut App, feed: Feed) {
-    if app.feed != feed {
+    if app.feed != feed || app.search_query.is_some() {
         app.feed = feed;
+        app.search_query = None;
         app.load_feed().await;
     }
 }
@@ -281,6 +301,7 @@ async fn run_command(app: &mut App, cmd: &str) {
         "show"      | "5"      => switch_feed(app, Feed::Show).await,
         "bookmarks" | "6"      => switch_feed(app, Feed::Bookmarks).await,
         "bookmark"  | "b"      => app.toggle_bookmark(),
+        "search"    | "s"      => app.start_search(),
         "refresh"   | "r"      => app.load_feed().await,
         "open" | "o"          => app.open_story_in_browser(),
         "hn"                  => app.open_hn_page_in_browser(),
@@ -295,7 +316,7 @@ async fn run_command(app: &mut App, cmd: &str) {
         }
         "help" | "?" => {
             app.status_message =
-                "login · logout · top/new/best/ask/show/bookmarks · user <n> · bookmark · refresh · open · hn · vote · quit".into();
+                "login · logout · top/new/best/ask/show/bookmarks · search · user <n> · bookmark · refresh · open · hn · vote · quit".into();
         }
         other => app.status_message = format!("Unknown: '{other}' — try /help"),
     }

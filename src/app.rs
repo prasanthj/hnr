@@ -82,6 +82,7 @@ pub enum Mode {
     Login,
     Compose,
     CommentDetail,
+    Search,
 }
 
 #[derive(Clone)]
@@ -137,6 +138,10 @@ pub struct App {
     pub bookmark_ids: HashSet<u64>,
     pub bookmarks_path: PathBuf,
 
+    pub search_input: String,
+    pub search_query: Option<String>,
+    pub search_base: String,
+
     pub loading: bool,
     pub client: reqwest::Client,
     pub api_base: String,
@@ -171,6 +176,9 @@ impl App {
                 crate::bookmarks::load(&p).iter().map(|b| b.id).collect()
             },
             bookmarks_path: crate::bookmarks::default_path(),
+            search_input: String::new(),
+            search_query: None,
+            search_base: "https://hn.algolia.com/api/v1".to_string(),
             loading: false,
             client,
             api_base: HN_API_BASE.to_string(),
@@ -495,6 +503,47 @@ impl App {
                 self.comments.len()
             );
         }
+    }
+
+    pub fn start_search(&mut self) {
+        self.search_input = String::new();
+        self.mode = Mode::Search;
+    }
+
+    pub async fn run_search(&mut self) {
+        let query = self.search_input.trim().to_string();
+        if query.is_empty() {
+            self.mode = Mode::Normal;
+            self.status_message = "Search cancelled.".into();
+            return;
+        }
+        self.mode = Mode::Normal;
+        self.loading = true;
+        self.status_message = format!("Searching for '{query}'...");
+        let client = self.client.clone();
+        let base = self.search_base.clone();
+        match crate::api::search_stories(&client, &query, &base).await {
+            Ok(items) => {
+                self.search_query = Some(query.clone());
+                self.stories = items;
+                self.story_cursor = 0;
+                self.story_scroll = 0;
+                self.comments = vec![];
+                self.comment_cursor = 0;
+                self.comment_scroll = 0;
+                self.active_pane = Pane::Stories;
+                self.status_message = format!(
+                    "{} results for '{}' | j/k navigate | 1-6 back to feeds",
+                    self.stories.len(),
+                    query
+                );
+            }
+            Err(e) => {
+                self.search_query = None;
+                self.status_message = format!("Search error: {e}");
+            }
+        }
+        self.loading = false;
     }
 
     pub fn toggle_bookmark(&mut self) {
@@ -1133,6 +1182,27 @@ mod tests {
         assert_eq!(app.comment_detail_scroll, 0);
     }
 
+    // ── start_search / run_search ─────────────────────────────────────────
+
+    #[test]
+    fn start_search_sets_mode_and_clears_input() {
+        let mut app = make_app_with_stories(1);
+        app.search_input = "old query".into();
+        app.start_search();
+        assert_eq!(app.mode, Mode::Search);
+        assert!(app.search_input.is_empty());
+    }
+
+    #[tokio::test]
+    async fn run_search_empty_input_cancels() {
+        let mut app = make_app_with_stories(1);
+        app.search_input = "  ".into();
+        app.run_search().await;
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.status_message.contains("cancelled"), "got: {}", app.status_message);
+        assert!(app.search_query.is_none());
+    }
+
     // ── close_user_profile ────────────────────────────────────────────────
 
     #[test]
@@ -1288,6 +1358,54 @@ mod integration_tests {
             "got: {}",
             app.status_message
         );
+    }
+
+    fn test_search_app(search_base: &str) -> App {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.search_base = search_base.to_string();
+        app
+    }
+
+    #[tokio::test]
+    async fn run_search_populates_stories_on_success() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/search"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "hits": [
+                    {"objectID": "1", "title": "Rust is great", "url": "https://example.com/1",
+                     "author": "alice", "points": 200, "num_comments": 42, "created_at_i": 0},
+                    {"objectID": "2", "title": "Go is fast", "url": "https://example.com/2",
+                     "author": "bob", "points": 150, "num_comments": 20, "created_at_i": 0},
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let mut app = test_search_app(&server.uri());
+        app.search_input = "rust".into();
+        app.run_search().await;
+
+        assert_eq!(app.stories.len(), 2, "expected 2 results");
+        assert_eq!(app.stories[0].display_title(), "Rust is great");
+        assert_eq!(app.stories[1].display_title(), "Go is fast");
+        assert_eq!(app.search_query.as_deref(), Some("rust"));
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.status_message.contains("rust"), "got: {}", app.status_message);
+    }
+
+    #[tokio::test]
+    async fn run_search_error_clears_search_query() {
+        let server = MockServer::start().await;
+        // no routes → 404 → JSON parse fails
+        let mut app = test_search_app(&server.uri());
+        app.search_input = "rust".into();
+        app.search_query = Some("old".into());
+        app.run_search().await;
+
+        assert!(app.search_query.is_none());
+        assert!(app.status_message.contains("Search error"), "got: {}", app.status_message);
     }
 
     #[tokio::test]
