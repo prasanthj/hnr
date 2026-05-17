@@ -12,6 +12,7 @@ Browse stories, read threaded comments, search, vote, reply, and bookmark — al
 - **Bookmarks** — save stories with `b`, browse them on feed `6`, persisted to `~/.hnr/bookmarks.json`
 - **Voting & replies** — upvote or reply to any story or comment when logged in
 - **User profiles** — view karma, bio, and submission count for any author
+- **Open in browser** — jump to the story URL or HN discussion page with `o` / `O`
 - **Clipboard** — copy the story URL with `y`
 - **Session** — login cookie saved to `~/.hnr/session` and restored on next launch
 
