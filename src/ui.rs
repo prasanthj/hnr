@@ -44,6 +44,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         ("3", "Best"),
         ("4", "Ask"),
         ("5", "Show"),
+        ("6", "Bookmarks"),
     ];
     let current = app.feed.label();
     let mut spans = vec![
@@ -125,6 +126,7 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                     ("j/k", "nav"),
                     ("Enter", "comments"),
                     ("Tab", "→pane"),
+                    ("b", "bookmark"),
                     ("o", "url"),
                     ("O", "hn"),
                     ("y", "copy url"),
@@ -201,9 +203,11 @@ fn draw_story_list(f: &mut Frame, app: &App, area: Rect) {
             };
             let rank_style = if selected { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
             let bg = if selected { SELECTED_BG } else { Color::Reset };
+            let bookmarked = app.bookmark_ids.contains(&story.id);
 
             let line1 = Line::from(vec![
                 Span::styled(rank, rank_style),
+                Span::styled(if bookmarked { "★ " } else { "" }, Style::default().fg(Color::Yellow)),
                 Span::styled(story.display_title(), title_style),
             ]);
             let line2 = Line::from(vec![
@@ -753,6 +757,39 @@ mod render_tests {
         app.comments = vec![root];
         let screen = render(&app);
         assert!(screen.contains("[+]"), "expand marker missing for collapsed comment");
+    }
+
+    // ── Bookmarks ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn header_shows_bookmarks_tab() {
+        let app = test_app(0);
+        let screen = render(&app);
+        assert!(screen.contains("Bookmarks"), "bookmarks tab missing from header");
+    }
+
+    #[test]
+    fn story_list_shows_bookmark_star_for_bookmarked_item() {
+        use std::collections::HashSet;
+        let mut app = test_app(1);
+        app.bookmark_ids = HashSet::from([1u64]);
+        let screen = render(&app);
+        assert!(screen.contains('★'), "bookmark star missing");
+    }
+
+    #[test]
+    fn story_list_no_star_when_not_bookmarked() {
+        let app = test_app(1);
+        let screen = render(&app);
+        assert!(!screen.contains('★'), "unexpected star for unbookmarked story");
+    }
+
+    #[test]
+    fn bookmarks_feed_title_in_story_list() {
+        let mut app = test_app(1);
+        app.feed = Feed::Bookmarks;
+        let screen = render(&app);
+        assert!(screen.contains("Bookmarks"), "Bookmarks not in story list title");
     }
 
     // ── Comment detail overlay ────────────────────────────────────────────

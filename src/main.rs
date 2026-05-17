@@ -1,5 +1,6 @@
 mod api;
 mod app;
+mod bookmarks;
 mod session;
 mod ui;
 
@@ -187,6 +188,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
         KeyCode::Char('3') => { switch_feed(app, Feed::Best).await; return; }
         KeyCode::Char('4') => { switch_feed(app, Feed::Ask).await; return; }
         KeyCode::Char('5') => { switch_feed(app, Feed::Show).await; return; }
+        KeyCode::Char('6') => { switch_feed(app, Feed::Bookmarks).await; return; }
         _ => {}
     }
 
@@ -209,6 +211,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
                     app.load_user(name).await;
                 }
             }
+            KeyCode::Char('b') => app.toggle_bookmark(),
             KeyCode::Char('v') => app.vote_current().await,
             KeyCode::Char('c') => app.start_compose().await,
             KeyCode::Char('o') => app.open_story_in_browser(),
@@ -230,6 +233,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
                     app.load_user(name).await;
                 }
             }
+            KeyCode::Char('b') => app.toggle_bookmark(),
             KeyCode::Char('v') => app.vote_current().await,
             KeyCode::Char('c') => app.start_compose().await,
             KeyCode::Char('o') => app.open_story_in_browser(),
@@ -274,8 +278,10 @@ async fn run_command(app: &mut App, cmd: &str) {
         "new"  | "2"          => switch_feed(app, Feed::New).await,
         "best" | "3"          => switch_feed(app, Feed::Best).await,
         "ask"  | "4"          => switch_feed(app, Feed::Ask).await,
-        "show" | "5"          => switch_feed(app, Feed::Show).await,
-        "refresh" | "r"       => app.load_feed().await,
+        "show"      | "5"      => switch_feed(app, Feed::Show).await,
+        "bookmarks" | "6"      => switch_feed(app, Feed::Bookmarks).await,
+        "bookmark"  | "b"      => app.toggle_bookmark(),
+        "refresh"   | "r"      => app.load_feed().await,
         "open" | "o"          => app.open_story_in_browser(),
         "hn"                  => app.open_hn_page_in_browser(),
         "vote" | "v"          => app.vote_current().await,
@@ -289,7 +295,7 @@ async fn run_command(app: &mut App, cmd: &str) {
         }
         "help" | "?" => {
             app.status_message =
-                "login · logout · top/new/best/ask/show · user <n> · refresh · open · hn · vote · quit".into();
+                "login · logout · top/new/best/ask/show/bookmarks · user <n> · bookmark · refresh · open · hn · vote · quit".into();
         }
         other => app.status_message = format!("Unknown: '{other}' — try /help"),
     }

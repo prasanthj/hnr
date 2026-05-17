@@ -1,9 +1,10 @@
 use crate::api::{fetch_ask_ids, fetch_best_ids, fetch_new_ids, fetch_show_ids, fetch_top_ids, Item, User};
+use crate::session::Session;
+use arboard::Clipboard;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 const HN_API_BASE: &str = "https://hacker-news.firebaseio.com/v0";
-use crate::session::Session;
-use std::collections::HashMap;
-use arboard::Clipboard;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Feed {
@@ -12,6 +13,7 @@ pub enum Feed {
     Best,
     Ask,
     Show,
+    Bookmarks,
 }
 
 impl Feed {
@@ -22,6 +24,7 @@ impl Feed {
             Feed::Best => "Best",
             Feed::Ask => "Ask HN",
             Feed::Show => "Show HN",
+            Feed::Bookmarks => "Bookmarks",
         }
     }
 }
@@ -131,6 +134,9 @@ pub struct App {
     pub comment_detail: Option<(String, String)>, // (author, plain text)
     pub comment_detail_scroll: usize,
 
+    pub bookmark_ids: HashSet<u64>,
+    pub bookmarks_path: PathBuf,
+
     pub loading: bool,
     pub client: reqwest::Client,
     pub api_base: String,
@@ -160,6 +166,11 @@ impl App {
             compose_state: None,
             comment_detail: None,
             comment_detail_scroll: 0,
+            bookmark_ids: {
+                let p = crate::bookmarks::default_path();
+                crate::bookmarks::load(&p).iter().map(|b| b.id).collect()
+            },
+            bookmarks_path: crate::bookmarks::default_path(),
             loading: false,
             client,
             api_base: HN_API_BASE.to_string(),
@@ -406,16 +417,32 @@ impl App {
     // ── Feed / comments ───────────────────────────────────────────────────
 
     pub async fn load_feed(&mut self) {
+        if self.feed == Feed::Bookmarks {
+            self.stories = crate::bookmarks::load(&self.bookmarks_path);
+            self.story_cursor = 0;
+            self.story_scroll = 0;
+            self.comments = vec![];
+            self.comment_cursor = 0;
+            self.comment_scroll = 0;
+            self.active_pane = Pane::Stories;
+            self.status_message = if self.stories.is_empty() {
+                "No bookmarks yet — press b to save a story.".into()
+            } else {
+                format!("{} bookmarks | b to toggle | j/k navigate", self.stories.len())
+            };
+            return;
+        }
         self.loading = true;
         self.status_message = format!("Loading {} stories...", self.feed.label());
         let client = self.client.clone();
         let base = self.api_base.clone();
         let ids = match self.feed {
-            Feed::Top => fetch_top_ids(&client, &base).await,
-            Feed::New => fetch_new_ids(&client, &base).await,
+            Feed::Top  => fetch_top_ids(&client, &base).await,
+            Feed::New  => fetch_new_ids(&client, &base).await,
             Feed::Best => fetch_best_ids(&client, &base).await,
-            Feed::Ask => fetch_ask_ids(&client, &base).await,
+            Feed::Ask  => fetch_ask_ids(&client, &base).await,
             Feed::Show => fetch_show_ids(&client, &base).await,
+            Feed::Bookmarks => unreachable!(),
         };
         match ids {
             Ok(mut ids) => {
@@ -467,6 +494,24 @@ impl App {
                 "{} top-level threads | j/k | Space collapse | u profile | v vote | c reply | Tab back",
                 self.comments.len()
             );
+        }
+    }
+
+    pub fn toggle_bookmark(&mut self) {
+        if let Some(story) = self.selected_story().cloned() {
+            let mut items = crate::bookmarks::load(&self.bookmarks_path);
+            if self.bookmark_ids.contains(&story.id) {
+                items.retain(|b| b.id != story.id);
+                self.bookmark_ids.remove(&story.id);
+                crate::bookmarks::save(&self.bookmarks_path, &items);
+                self.status_message = format!("Removed bookmark: {}", story.display_title());
+            } else {
+                let title = story.display_title().to_string();
+                self.bookmark_ids.insert(story.id);
+                items.push(story);
+                crate::bookmarks::save(&self.bookmarks_path, &items);
+                self.status_message = format!("★ Bookmarked: {title}");
+            }
         }
     }
 
@@ -665,6 +710,14 @@ mod tests {
         app
     }
 
+    fn make_app_with_temp_bookmarks(n: usize) -> (App, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = make_app_with_stories(n);
+        app.bookmarks_path = dir.path().join("bookmarks.json");
+        app.bookmark_ids = HashSet::new();
+        (app, dir)
+    }
+
     fn make_app_with_comments(n: usize) -> App {
         let mut app = make_app_with_stories(1);
         app.comments = (100..100 + n as u64)
@@ -824,6 +877,7 @@ mod tests {
         assert_eq!(Feed::Best.label(), "Best");
         assert_eq!(Feed::Ask.label(), "Ask HN");
         assert_eq!(Feed::Show.label(), "Show HN");
+        assert_eq!(Feed::Bookmarks.label(), "Bookmarks");
     }
 
     // ── flat_comments ─────────────────────────────────────────────────────
@@ -976,6 +1030,60 @@ mod tests {
         app.logout();
         assert!(app.session.is_none());
         assert!(app.status_message.contains("Logged out"), "got: {}", app.status_message);
+    }
+
+    // ── toggle_bookmark ───────────────────────────────────────────────────
+
+    #[test]
+    fn toggle_bookmark_adds_then_removes() {
+        let (mut app, _dir) = make_app_with_temp_bookmarks(1);
+        app.toggle_bookmark();
+        assert!(app.bookmark_ids.contains(&1));
+        assert!(app.status_message.contains("Bookmarked"), "got: {}", app.status_message);
+        app.toggle_bookmark();
+        assert!(!app.bookmark_ids.contains(&1));
+        assert!(app.status_message.contains("Removed bookmark"), "got: {}", app.status_message);
+    }
+
+    #[test]
+    fn toggle_bookmark_persists_to_disk() {
+        let (mut app, dir) = make_app_with_temp_bookmarks(1);
+        let path = dir.path().join("bookmarks.json");
+        app.toggle_bookmark();
+        let saved = crate::bookmarks::load(&path);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].id, 1);
+        app.toggle_bookmark();
+        let saved = crate::bookmarks::load(&path);
+        assert!(saved.is_empty());
+    }
+
+    #[test]
+    fn toggle_bookmark_noop_when_no_stories() {
+        let (mut app, _dir) = make_app_with_temp_bookmarks(0);
+        app.toggle_bookmark(); // should not panic
+        assert!(app.bookmark_ids.is_empty());
+    }
+
+    // ── Feed::Bookmarks in load_feed ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn load_feed_bookmarks_reads_from_disk() {
+        let (mut app, dir) = make_app_with_temp_bookmarks(0);
+        crate::bookmarks::save(&dir.path().join("bookmarks.json"), &[make_item(1), make_item(2)]);
+        app.feed = Feed::Bookmarks;
+        app.load_feed().await;
+        assert_eq!(app.stories.len(), 2);
+        assert_eq!(app.stories[0].id, 1);
+    }
+
+    #[tokio::test]
+    async fn load_feed_bookmarks_empty_shows_help_message() {
+        let (mut app, _dir) = make_app_with_temp_bookmarks(0);
+        app.feed = Feed::Bookmarks;
+        app.load_feed().await;
+        assert!(app.stories.is_empty());
+        assert!(app.status_message.contains("No bookmarks"), "got: {}", app.status_message);
     }
 
     // ── open/close_comment_detail ─────────────────────────────────────────
