@@ -1,6 +1,6 @@
 Output demo.gif
 
-Set Shell "bash"
+Set Shell "zsh"
 Set FontSize 15
 Set Width 1600
 Set Height 900
@@ -9,13 +9,19 @@ Set Padding 24
 Set PlaybackSpeed 1
 Set TypingSpeed 80ms
 
-# Show install command, then launch
+Hide
+Type "export PATH=$HOME/.cargo/bin:$PATH"
+Enter
+Sleep 500ms
+Show
+
+# Show install command
 Type "cargo install hnr"
 Sleep 1s
 Enter
-Sleep 18s
+Sleep 6s
 
-# Clear and launch
+# Launch
 Type "hnr"
 Enter
 Sleep 5s
@@ -36,9 +42,7 @@ Sleep 600ms
 Enter
 Sleep 3500ms
 
-# Read through comments
-Type "j"
-Sleep 400ms
+# Navigate comments
 Type "j"
 Sleep 400ms
 Type "j"
@@ -46,19 +50,15 @@ Sleep 400ms
 Type "j"
 Sleep 400ms
 
-# Full text overlay
+# Expand comment inline
 Enter
-Sleep 2s
+Sleep 2000ms
 
-# Scroll the overlay
-Type "j"
-Sleep 400ms
-Type "j"
-Sleep 400ms
+# Collapse it
+Enter
+Sleep 800ms
 
-# Close overlay, go back
-Escape
-Sleep 500ms
+# Back to stories
 Escape
 Sleep 800ms
 
