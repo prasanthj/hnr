@@ -151,7 +151,7 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             // global + pane-specific, every shortcut unique
             let global: &[(&str, &str)] = &[
                 ("h", "help"),
-                ("r", "refresh"),
+                ("R", "refresh"),
                 ("l", login_hint),
                 ("/", "cmd"),
                 ("q", "quit"),
@@ -161,7 +161,7 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                     ("j/k", "nav"),
                     ("Enter", "comments"),
                     ("Tab", "→pane"),
-                    ("R", "read"),
+                    ("r", "read"),
                     ("b", "bookmark"),
                     ("u", "unread"),
                     ("o", "url"),
@@ -577,7 +577,7 @@ fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scrol
         .borders(Borders::ALL)
         .border_style(Style::default().fg(ORANGE))
         .title_bottom(Line::from(Span::styled(
-            " j/k scroll  ·  Esc close ",
+            " j/k scroll  ·  d/u page  ·  Esc/r close ",
             Style::default().fg(GRAY),
         )));
     let inner = block.inner(popup);

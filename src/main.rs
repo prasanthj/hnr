@@ -208,11 +208,11 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     match code {
         KeyCode::Char('h') => {
             app.status_message =
-                "1-7:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  R:read  y:copy  v:vote  c:reply  p:profile  u:unread  b:bookmark  ?:search  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
+                "1-7:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  r:read  y:copy  v:vote  c:reply  p:profile  u:unread  b:bookmark  ?:search  o:url  O:hn  R:refresh  l:login/logout  /:cmd  q:quit"
                     .into();
             return;
         }
-        KeyCode::Char('r') => { app.load_feed().await; return; }
+        KeyCode::Char('R') => { app.load_feed().await; return; }
         KeyCode::Char('l') => {
             if app.session.is_some() {
                 app.logout();
@@ -257,7 +257,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
             KeyCode::Char('y') => app.copy_url_to_clipboard(),
-            KeyCode::Char('R') => app.load_reader().await,
+            KeyCode::Char('r') => app.load_reader().await,
             _ => {}
         },
         Pane::Comments => match code {
@@ -281,7 +281,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
             KeyCode::Char('y') => app.copy_url_to_clipboard(),
-            KeyCode::Char('R') => app.load_reader().await,
+            KeyCode::Char('r') => app.load_reader().await,
             _ => {}
         },
     }
@@ -303,7 +303,7 @@ fn handle_reader_keys(app: &mut App, code: KeyCode) {
         KeyCode::Char('u') => {
             app.reader_scroll = app.reader_scroll.saturating_sub(20);
         }
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('R') => app.close_reader(),
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('r') => app.close_reader(),
         _ => {}
     }
 }
