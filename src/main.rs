@@ -292,6 +292,7 @@ fn handle_reader_keys(app: &mut App, code: KeyCode) {
         KeyCode::Char('k') | KeyCode::Up => app.reader_scroll = app.reader_scroll.saturating_sub(1),
         KeyCode::Char('d') => app.reader_scroll += 20,
         KeyCode::Char('u') => app.reader_scroll = app.reader_scroll.saturating_sub(20),
+        KeyCode::Char('o') => { app.close_reader(); app.open_story_in_browser(); }
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('r') => app.close_reader(),
         _ => {}
     }

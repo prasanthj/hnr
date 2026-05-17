@@ -143,6 +143,8 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             Span::styled(" scroll  ", Style::default().fg(GRAY)),
             Span::styled("d/u", Style::default().fg(ORANGE)),
             Span::styled(" page  ", Style::default().fg(GRAY)),
+            Span::styled("o", Style::default().fg(ORANGE)),
+            Span::styled(" browser  ", Style::default().fg(GRAY)),
             Span::styled("Esc", Style::default().fg(ORANGE)),
             Span::styled(" close", Style::default().fg(GRAY)),
         ],
@@ -577,7 +579,7 @@ fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scrol
         .borders(Borders::ALL)
         .border_style(Style::default().fg(ORANGE))
         .title_bottom(Line::from(Span::styled(
-            " j/k scroll  ·  d/u page  ·  Esc/r close ",
+          " j/k scroll  ·  d/u page  ·  o browser  ·  Esc close ",
             Style::default().fg(GRAY),
         )));
     let inner = block.inner(popup);
