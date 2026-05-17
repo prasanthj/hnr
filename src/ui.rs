@@ -312,6 +312,31 @@ fn draw_story_header(f: &mut Frame, story: &crate::api::Item, area: Rect) {
 
 fn draw_comments(f: &mut Frame, app: &App, area: Rect, focused: bool) {
     let border_style = if focused { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
+
+    if app.comments_loading {
+        let p = Paragraph::new("Loading comments…")
+            .block(Block::default().title(" Comments ").borders(Borders::ALL).border_style(border_style))
+            .style(Style::default().fg(GRAY));
+        f.render_widget(p, area);
+        return;
+    }
+
+    if app.comments_story_id.is_none() {
+        let p = Paragraph::new("Press Enter to load comments.")
+            .block(Block::default().title(" Comments ").borders(Borders::ALL).border_style(border_style))
+            .style(Style::default().fg(GRAY));
+        f.render_widget(p, area);
+        return;
+    }
+
+    if app.comments.is_empty() {
+        let p = Paragraph::new("No comments yet.")
+            .block(Block::default().title(" Comments ").borders(Borders::ALL).border_style(border_style))
+            .style(Style::default().fg(GRAY));
+        f.render_widget(p, area);
+        return;
+    }
+
     let flat = app.flat_comments();
     let visible = (area.height as usize).saturating_sub(2);
     let depth_colors = [Color::Cyan, Color::Green, Color::Yellow, Color::Magenta, Color::Red, Color::Blue, Color::White];
@@ -340,7 +365,7 @@ fn draw_comments(f: &mut Frame, app: &App, area: Rect, focused: bool) {
                 Style::default().fg(dc)
             };
 
-            let text = node.item.text_plain();
+            let text = &node.text;
             let bg = if selected { SELECTED_BG } else { Color::Reset };
             let is_expanded = app.expanded_comment == Some(node.item.id);
 
@@ -767,6 +792,7 @@ mod render_tests {
         item.text = Some("<p>Great post!</p>".into());
         item.by = Some("alice".into());
         app.comments = vec![CommentNode::new(item, 0)];
+        app.comments_story_id = Some(100);
         let screen = render(&app);
         assert!(screen.contains("alice"), "commenter name missing");
         assert!(screen.contains("Great post!"), "comment text missing");
@@ -782,6 +808,7 @@ mod render_tests {
         root.children = vec![child];
         root.collapsed = true;
         app.comments = vec![root];
+        app.comments_story_id = Some(100);
         let screen = render(&app);
         assert!(screen.contains("[+]"), "expand marker missing for collapsed comment");
     }
@@ -830,6 +857,7 @@ mod render_tests {
         let mut item = make_item(100);
         item.text = Some("<p>Rust is amazing for systems programming.</p>".into());
         app.comments = vec![CommentNode::new(item, 0)];
+        app.comments_story_id = Some(100);
         app.expanded_comment = Some(100);
         let screen = render(&app);
         assert!(screen.contains("Rust is amazing"), "full text not shown when expanded");
@@ -843,6 +871,7 @@ mod render_tests {
         let mut item = make_item(100);
         item.text = Some("<p>First line.</p><p>Second line should not appear.</p>".into());
         app.comments = vec![CommentNode::new(item, 0)];
+        app.comments_story_id = Some(100);
         app.expanded_comment = None;
         let screen = render(&app);
         assert!(screen.contains("First line"), "preview line missing");
@@ -912,6 +941,7 @@ mod render_tests {
         let mut root = CommentNode::new(make_item(100), 0);
         root.children = vec![child];
         app.comments = vec![root];
+        app.comments_story_id = Some(100);
         let screen = render(&app);
         assert!(screen.contains("[-]"), "collapse marker missing for expanded comment");
     }

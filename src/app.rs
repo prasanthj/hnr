@@ -90,6 +90,7 @@ pub enum Mode {
 #[derive(Clone)]
 pub struct CommentNode {
     pub item: Item,
+    pub text: String,
     pub depth: usize,
     pub collapsed: bool,
     pub children: Vec<CommentNode>,
@@ -97,7 +98,8 @@ pub struct CommentNode {
 
 impl CommentNode {
     pub fn new(item: Item, depth: usize) -> Self {
-        Self { item, depth, collapsed: false, children: vec![] }
+        let text = item.text_plain();
+        Self { item, text, depth, collapsed: false, children: vec![] }
     }
 
     pub fn flatten(&self) -> Vec<(&CommentNode, usize)> {
@@ -119,6 +121,8 @@ pub struct App {
     pub story_scroll: usize,
 
     pub comments: Vec<CommentNode>,
+    pub comments_story_id: Option<u64>,
+    pub comments_loading: bool,
     pub comment_cursor: usize,
     pub comment_scroll: usize,
 
@@ -163,6 +167,8 @@ impl App {
             story_cursor: 0,
             story_scroll: 0,
             comments: vec![],
+            comments_story_id: None,
+            comments_loading: false,
             comment_cursor: 0,
             comment_scroll: 0,
             active_pane: Pane::Stories,
@@ -440,6 +446,8 @@ impl App {
             self.story_cursor = 0;
             self.story_scroll = 0;
             self.comments = vec![];
+            self.comments_story_id = None;
+            self.comments_loading = false;
             self.comment_cursor = 0;
             self.comment_scroll = 0;
             self.active_pane = Pane::Stories;
@@ -479,6 +487,8 @@ impl App {
                 self.story_cursor = 0;
                 self.story_scroll = 0;
                 self.comments = vec![];
+                self.comments_story_id = None;
+                self.comments_loading = false;
                 self.comment_cursor = 0;
                 self.comment_scroll = 0;
                 self.active_pane = Pane::Stories;
@@ -510,17 +520,20 @@ impl App {
                 crate::seen::save(&self.seen_path, &self.seen_ids);
             }
             self.expanded_comment = None;
+            self.comments = vec![];
+            self.comments_story_id = Some(story_id);
             let kids = story.kids.clone().unwrap_or_default();
             if kids.is_empty() {
                 self.status_message = "No comments.".into();
-                self.comments = vec![];
                 return;
             }
+            self.comments_loading = true;
             self.status_message = "Loading comments...".into();
             let client = self.client.clone();
             let base = self.api_base.clone();
             let nodes = load_comment_tree(&client, &kids, 0, &base).await;
             self.comments = nodes;
+            self.comments_loading = false;
             let (cursor, scroll) = self.comment_pos_cache.get(&story_id).copied().unwrap_or((0, 0));
             self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
             self.comment_scroll = scroll;
@@ -674,11 +687,11 @@ mod tests {
     use crate::session::Session;
 
     fn make_node(id: u64, children: Vec<CommentNode>) -> CommentNode {
-        CommentNode { item: make_item(id), depth: 0, collapsed: false, children }
+        CommentNode { item: make_item(id), text: String::new(), depth: 0, collapsed: false, children }
     }
 
     fn make_node_depth(id: u64, depth: usize, children: Vec<CommentNode>) -> CommentNode {
-        CommentNode { item: make_item(id), depth, collapsed: false, children }
+        CommentNode { item: make_item(id), text: String::new(), depth, collapsed: false, children }
     }
 
     // ── CommentNode::flatten ──────────────────────────────────────────────
@@ -957,7 +970,7 @@ mod tests {
         let mut app = make_app_with_stories(1);
         let child = CommentNode::new(make_item(101), 1);
         app.comments = vec![
-            CommentNode { item: make_item(100), depth: 0, collapsed: false, children: vec![child] },
+            CommentNode { item: make_item(100), text: String::new(), depth: 0, collapsed: false, children: vec![child] },
             CommentNode::new(make_item(102), 0),
         ];
         // root 100, child 101, root 102
@@ -1031,6 +1044,7 @@ mod tests {
         let mut app = make_app_with_stories(1);
         app.comments = vec![CommentNode {
             item: make_item(100),
+            text: String::new(),
             depth: 0,
             collapsed: false,
             children: vec![child],
