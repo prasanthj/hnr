@@ -2,6 +2,8 @@
 
 A fast terminal UI for Hacker News built with Rust and [ratatui](https://ratatui.rs).
 
+![hnr screenshot](screenshot.png)
+
 ## Install
 
 ```bash
@@ -19,7 +21,7 @@ hnr
 | Key | Action |
 |-----|--------|
 | `1-5` | Switch feed: Top / New / Best / Ask / Show |
-| `j` / `k` | Navigate up/down |
+| `j` / `k` / `↑` / `↓` | Navigate up/down |
 | `Enter` | Open comments for selected story |
 | `Tab` | Switch between story list and comments pane |
 | `Space` | Collapse / expand comment thread |
