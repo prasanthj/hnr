@@ -7,7 +7,8 @@ Browse stories, read threaded comments, search, vote, reply, and bookmark — al
 ## Features
 
 - **Six feeds** — Top, New, Best, Ask HN, Show HN, Jobs
-- **Threaded comments** — recursive tree with collapse/expand and a full-text overlay
+- **Threaded comments** — recursive tree with inline expand/collapse per comment
+- **Reader mode** — press `r` to fetch and render any article as clean readable text (powered by Mozilla Readability)
 - **Search** — Algolia-powered full-text search; press `?` to open, results drop into the story list
 - **Seen tracking** — stories dim automatically when you open their comments; press `u` to mark unread (persisted to `~/.hnr/seen.json`)
 - **Bookmarks** — save stories with `b`, browse them on feed `7`, persisted to `~/.hnr/bookmarks.json`
@@ -47,11 +48,13 @@ hnr
 | Key | Action |
 |-----|--------|
 | `1` – `7` | Switch feed: Top / New / Best / Ask / Show / Jobs / Bookmarks |
-| `j` / `k` / `↑` / `↓` | Navigate up/down |
-| `Enter` | Open comments (story pane) · Full-text overlay (comment pane) |
+| `j` / `k` / `↑` / `↓` | Navigate up / down |
+| `Enter` | Fetch comments (story pane) · Expand / collapse comment inline |
 | `Tab` | Switch between story list and comments pane |
-| `Esc` | Back to story pane · Close overlay |
+| `Esc` | Back to story pane · Close modal |
 | `Space` | Collapse / expand comment thread |
+| `r` | Reader mode — fetch and render article as clean text |
+| `R` | Refresh current feed |
 | `b` | Bookmark / unbookmark selected story |
 | `u` | Mark selected story as unread |
 | `?` | Search stories via Algolia |
@@ -62,7 +65,6 @@ hnr
 | `O` | Open HN discussion page in browser |
 | `y` | Copy story URL to clipboard |
 | `l` | Login / logout |
-| `r` | Refresh current feed |
 | `h` | Show help |
 | `/` | Command mode |
 | `q` | Quit |

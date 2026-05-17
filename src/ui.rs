@@ -139,7 +139,7 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             Span::styled(" cancel", Style::default().fg(GRAY)),
         ],
         Mode::Reader => vec![
-            Span::styled(" j/k", Style::default().fg(ORANGE)),
+            Span::styled(" j/k/↑↓", Style::default().fg(ORANGE)),
             Span::styled(" scroll  ", Style::default().fg(GRAY)),
             Span::styled("d/u", Style::default().fg(ORANGE)),
             Span::styled(" page  ", Style::default().fg(GRAY)),
@@ -158,24 +158,24 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             ];
             let pane: &[(&str, &str)] = match app.active_pane {
                 Pane::Stories => &[
-                    ("j/k", "nav"),
+                    ("j/k/↑↓", "nav"),
                     ("Enter", "comments"),
                     ("Tab", "→pane"),
                     ("r", "read"),
                     ("b", "bookmark"),
                     ("u", "unread"),
-                    ("o", "url"),
+                    ("o", "open"),
                     ("y", "copy url"),
                     ("v", "vote"),
                     ("p", "profile"),
                 ],
                 Pane::Comments => &[
-                    ("j/k", "nav"),
+                    ("j/k/↑↓", "nav"),
                     ("Enter", "expand/collapse"),
                     ("Space", "thread collapse"),
                     ("Esc", "←back"),
                     ("u", "unread"),
-                    ("o", "url"),
+                    ("o", "open"),
                     ("O", "hn"),
                     ("y", "copy url"),
                     ("v", "vote"),
@@ -304,7 +304,7 @@ fn draw_detail_panel(f: &mut Frame, app: &App, area: Rect) {
 fn draw_story_header(f: &mut Frame, story: &crate::api::Item, area: Rect) {
     let url = story.url.as_deref().unwrap_or("(self post)");
     let ago = story.time_ago();
-    let meta = format!("▲ {}  by {}  {}  | {} comments  | o: url  O: HN", story.score(), story.display_by(), ago, story.comment_count());
+    let meta = format!("▲ {}  by {}  {}  | {} comments  | o: open  O: HN", story.score(), story.display_by(), ago, story.comment_count());
     let text_body = story.text_plain();
 
     let mut lines = vec![

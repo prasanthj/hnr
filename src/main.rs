@@ -208,7 +208,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     match code {
         KeyCode::Char('h') => {
             app.status_message =
-                "1-7:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  r:read  y:copy  v:vote  c:reply  p:profile  u:unread  b:bookmark  ?:search  o:url  O:hn  R:refresh  l:login/logout  /:cmd  q:quit"
+                "1-7:feeds  j/k/↑↓:nav  Enter:comments/expand  Tab/Esc:pane  Space:collapse  r:read  y:copy  v:vote  c:reply  p:profile  u:unread  b:bookmark  ?:search  o:open  O:hn  R:refresh  l:login/logout  /:cmd  q:quit"
                     .into();
             return;
         }
