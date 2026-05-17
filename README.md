@@ -28,6 +28,11 @@ Browse stories, read threaded comments, search, vote, reply, and bookmark — al
 ## Install
 
 ```bash
+# Homebrew
+brew tap prasanthj/hnr
+brew install hnr
+
+# Cargo
 cargo install hnr
 ```
 
