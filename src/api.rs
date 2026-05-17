@@ -398,6 +398,22 @@ pub async fn search_stories(
     Ok(resp.hits.into_iter().filter_map(|h| h.into_item()).collect())
 }
 
+pub async fn fetch_latest_version(client: &reqwest::Client) -> anyhow::Result<String> {
+    #[derive(Deserialize)]
+    struct Krate { newest_version: String }
+    #[derive(Deserialize)]
+    struct Resp { #[serde(rename = "crate")] krate: Krate }
+
+    let resp: Resp = client
+        .get("https://crates.io/api/v1/crates/hnr")
+        .header("User-Agent", concat!("hnr/", env!("CARGO_PKG_VERSION")))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(resp.krate.newest_version)
+}
+
 pub async fn fetch_user(client: &reqwest::Client, username: &str, base: &str) -> anyhow::Result<User> {
     let user: User = client
         .get(format!("{base}/user/{username}.json"))

@@ -33,6 +33,19 @@ async fn main() -> anyhow::Result<()> {
         let name = app.session.as_ref().unwrap().username.clone();
         app.status_message = format!("Logged in as {name} | Loading...");
     }
+
+    let update_flag = app.update_available.clone();
+    let version_client = app.client.clone();
+    tokio::spawn(async move {
+        if let Ok(latest) = crate::api::fetch_latest_version(&version_client).await {
+            if latest != env!("CARGO_PKG_VERSION") {
+                if let Ok(mut flag) = update_flag.lock() {
+                    *flag = Some(latest);
+                }
+            }
+        }
+    });
+
     app.load_feed().await;
 
     loop {

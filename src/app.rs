@@ -3,6 +3,7 @@ use crate::session::Session;
 use arboard::Clipboard;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 const HN_API_BASE: &str = "https://hacker-news.firebaseio.com/v0";
 
@@ -149,7 +150,8 @@ pub struct App {
     pub client: reqwest::Client,
     pub api_base: String,
     pub item_cache: HashMap<u64, Item>,
-    pub comment_pos_cache: HashMap<u64, (usize, usize)>, // story_id -> (cursor, scroll)
+    pub comment_pos_cache: HashMap<u64, (usize, usize)>,
+    pub update_available: Arc<Mutex<Option<String>>>,
 }
 
 impl App {
@@ -191,6 +193,7 @@ impl App {
             api_base: HN_API_BASE.to_string(),
             item_cache: HashMap::new(),
             comment_pos_cache: HashMap::new(),
+            update_available: Arc::new(Mutex::new(None)),
         }
     }
 

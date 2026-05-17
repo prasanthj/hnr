@@ -79,8 +79,28 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         ));
     }
 
+    let update = app.update_available.lock().ok().and_then(|g| g.clone());
+    let version_str = match update {
+        Some(ref v) => format!(" v{} ↑{} ", env!("CARGO_PKG_VERSION"), v),
+        None => format!(" v{} ", env!("CARGO_PKG_VERSION")),
+    };
+    let version_style = if update.is_some() {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(GRAY)
+    };
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(version_str.len() as u16)])
+        .split(area);
+
     let p = Paragraph::new(Line::from(spans)).style(Style::default().bg(DARK));
-    f.render_widget(p, area);
+    f.render_widget(p, cols[0]);
+
+    let ver = Paragraph::new(Line::from(Span::styled(version_str, version_style)))
+        .style(Style::default().bg(DARK));
+    f.render_widget(ver, cols[1]);
 }
 
 fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
