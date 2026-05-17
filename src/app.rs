@@ -693,6 +693,52 @@ mod tests {
         let app = App::new(client);
         assert!(app.selected_story().is_none());
     }
+
+    // ── Comment scroll memory ─────────────────────────────────────────────
+
+    #[test]
+    fn save_comment_pos_stores_cursor_and_scroll() {
+        let mut app = make_app_with_stories(3);
+        app.story_cursor = 1;
+        app.comment_cursor = 5;
+        app.comment_scroll = 3;
+        app.save_comment_pos();
+        let story_id = app.stories[1].id;
+        assert_eq!(app.comment_pos_cache.get(&story_id).copied(), Some((5, 3)));
+    }
+
+    #[test]
+    fn save_comment_pos_noop_when_no_stories() {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.save_comment_pos();
+        assert!(app.comment_pos_cache.is_empty());
+    }
+
+    #[test]
+    fn save_comment_pos_overwrites_previous_entry() {
+        let mut app = make_app_with_stories(2);
+        app.story_cursor = 0;
+        app.comment_cursor = 2;
+        app.comment_scroll = 1;
+        app.save_comment_pos();
+        app.comment_cursor = 7;
+        app.comment_scroll = 4;
+        app.save_comment_pos();
+        let story_id = app.stories[0].id;
+        assert_eq!(app.comment_pos_cache.get(&story_id).copied(), Some((7, 4)));
+    }
+
+    // ── copy_url_to_clipboard ─────────────────────────────────────────────
+
+    #[test]
+    fn copy_url_no_op_when_no_stories() {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.copy_url_to_clipboard();
+        // should not panic; status message unchanged from init
+        assert!(!app.status_message.starts_with("Copied:"));
+    }
 }
 
 fn toggle_in_tree(nodes: &mut Vec<CommentNode>, id: u64) {

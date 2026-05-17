@@ -309,6 +309,31 @@ mod tests {
         assert!(plain.contains("My site"));
         assert!(!plain.contains("<a"));
     }
+
+    #[test]
+    fn time_ago_none_returns_empty() {
+        assert_eq!(bare_item(1).time_ago(), "");
+    }
+
+    #[test]
+    fn time_ago_formats_correctly() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let seconds = Item { time: Some(now - 30), ..bare_item(1) };
+        assert!(seconds.time_ago().contains("s ago"), "got: {}", seconds.time_ago());
+
+        let minutes = Item { time: Some(now - 5 * 60), ..bare_item(1) };
+        assert!(minutes.time_ago().contains("m ago"), "got: {}", minutes.time_ago());
+
+        let hours = Item { time: Some(now - 3 * 3600), ..bare_item(1) };
+        assert!(hours.time_ago().contains("h ago"), "got: {}", hours.time_ago());
+
+        let days = Item { time: Some(now - 2 * 86400), ..bare_item(1) };
+        assert!(days.time_ago().contains("d ago"), "got: {}", days.time_ago());
+    }
 }
 
 pub async fn fetch_user(client: &reqwest::Client, username: &str) -> anyhow::Result<User> {
