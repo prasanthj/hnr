@@ -40,8 +40,12 @@ impl Session {
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn with_temp_home<F: FnOnce()>(f: F) {
+        let _guard = ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         let orig = env::var("HOME").unwrap_or_default();
         env::set_var("HOME", dir.path());

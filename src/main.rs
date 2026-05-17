@@ -164,6 +164,31 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
         return;
     }
 
+    // global keys work in both panes
+    match code {
+        KeyCode::Char('h') => {
+            app.status_message =
+                "1-5:feeds  j/k:nav  Enter:comments  Tab:pane  Space:collapse  v:vote  c:reply  u:profile  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
+                    .into();
+            return;
+        }
+        KeyCode::Char('r') => { app.load_feed().await; return; }
+        KeyCode::Char('l') => {
+            if app.session.is_some() {
+                app.logout();
+            } else {
+                app.start_login();
+            }
+            return;
+        }
+        KeyCode::Char('1') => { switch_feed(app, Feed::Top).await; return; }
+        KeyCode::Char('2') => { switch_feed(app, Feed::New).await; return; }
+        KeyCode::Char('3') => { switch_feed(app, Feed::Best).await; return; }
+        KeyCode::Char('4') => { switch_feed(app, Feed::Ask).await; return; }
+        KeyCode::Char('5') => { switch_feed(app, Feed::Show).await; return; }
+        _ => {}
+    }
+
     let visible = height.saturating_sub(10);
     match app.active_pane {
         Pane::Stories => match code {
@@ -187,12 +212,6 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('c') => app.start_compose().await,
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
-            KeyCode::Char('r') => app.load_feed().await,
-            KeyCode::Char('1') => switch_feed(app, Feed::Top).await,
-            KeyCode::Char('2') => switch_feed(app, Feed::New).await,
-            KeyCode::Char('3') => switch_feed(app, Feed::Best).await,
-            KeyCode::Char('4') => switch_feed(app, Feed::Ask).await,
-            KeyCode::Char('5') => switch_feed(app, Feed::Show).await,
             _ => {}
         },
         Pane::Comments => match code {
@@ -228,8 +247,9 @@ async fn run_command(app: &mut App, cmd: &str) {
 
     match verb {
         "q" | "quit" | "exit" => std::process::exit(0),
-        "login"               => app.start_login(),
-        "logout"              => app.logout(),
+        "login"  | "l" if app.session.is_none() => app.start_login(),
+        "logout" | "l" if app.session.is_some() => app.logout(),
+        "l"                   => app.start_login(),
         "top"  | "1"          => switch_feed(app, Feed::Top).await,
         "new"  | "2"          => switch_feed(app, Feed::New).await,
         "best" | "3"          => switch_feed(app, Feed::Best).await,

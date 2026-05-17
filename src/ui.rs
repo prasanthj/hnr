@@ -16,12 +16,18 @@ pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
     let root = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1), // header
+            Constraint::Min(0),    // body
+            Constraint::Length(1), // hints
+            Constraint::Length(1), // status / command
+        ])
         .split(area);
 
     draw_header(f, app, root[0]);
     draw_body(f, app, root[1]);
-    draw_statusbar(f, app, root[2]);
+    draw_hints(f, app, root[2]);
+    draw_statusbar(f, app, root[3]);
 
     match app.mode {
         Mode::Login => draw_login_overlay(f, app, area),
@@ -31,26 +37,40 @@ pub fn draw(f: &mut Frame, app: &App) {
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
-    let feeds = ["Top", "New", "Best", "Ask HN", "Show HN"];
+    let feeds = [
+        ("1", "Top"),
+        ("2", "New"),
+        ("3", "Best"),
+        ("4", "Ask"),
+        ("5", "Show"),
+    ];
     let current = app.feed.label();
     let mut spans = vec![
         Span::styled(" hnr ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
-        Span::raw(" | "),
+        Span::raw("│ "),
     ];
-    for feed in &feeds {
-        if *feed == current {
+    for (num, label) in &feeds {
+        let is_current = current.starts_with(label);
+        if is_current {
             spans.push(Span::styled(
-                *feed,
+                format!("{num}:{label}"),
                 Style::default().fg(Color::Black).bg(ORANGE).add_modifier(Modifier::BOLD),
             ));
         } else {
-            spans.push(Span::styled(*feed, Style::default().fg(GRAY)));
+            spans.push(Span::styled(
+                num.to_string(),
+                Style::default().fg(ORANGE),
+            ));
+            spans.push(Span::styled(
+                format!(":{label}"),
+                Style::default().fg(GRAY),
+            ));
         }
         spans.push(Span::raw("  "));
     }
 
     if let Some(session) = &app.session {
-        spans.push(Span::raw("| "));
+        spans.push(Span::raw("│ "));
         spans.push(Span::styled(
             format!(" {} ", session.username),
             Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD),
@@ -58,6 +78,83 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let p = Paragraph::new(Line::from(spans)).style(Style::default().bg(DARK));
+    f.render_widget(p, area);
+}
+
+fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
+    let spans = match app.mode {
+        Mode::Login => vec![
+            Span::styled(" Tab", Style::default().fg(ORANGE)),
+            Span::styled(" field  ", Style::default().fg(GRAY)),
+            Span::styled("Enter", Style::default().fg(ORANGE)),
+            Span::styled(" submit  ", Style::default().fg(GRAY)),
+            Span::styled("Esc", Style::default().fg(ORANGE)),
+            Span::styled(" cancel", Style::default().fg(GRAY)),
+        ],
+        Mode::Compose => vec![
+            Span::styled(" Ctrl+S", Style::default().fg(ORANGE)),
+            Span::styled(" post  ", Style::default().fg(GRAY)),
+            Span::styled("Esc", Style::default().fg(ORANGE)),
+            Span::styled(" cancel", Style::default().fg(GRAY)),
+        ],
+        Mode::Command => vec![
+            Span::styled(" Enter", Style::default().fg(ORANGE)),
+            Span::styled(" run  ", Style::default().fg(GRAY)),
+            Span::styled("Esc", Style::default().fg(ORANGE)),
+            Span::styled(" cancel", Style::default().fg(GRAY)),
+        ],
+        Mode::Normal => {
+            let login_hint = if app.session.is_some() { "logout" } else { "login" };
+            // global + pane-specific, every shortcut unique
+            let global: &[(&str, &str)] = &[
+                ("h", "help"),
+                ("r", "refresh"),
+                ("l", login_hint),
+                ("/", "cmd"),
+                ("q", "quit"),
+            ];
+            let pane: &[(&str, &str)] = match app.active_pane {
+                Pane::Stories => &[
+                    ("j/k", "nav"),
+                    ("Enter", "comments"),
+                    ("Tab", "→pane"),
+                    ("o", "url"),
+                    ("O", "hn"),
+                    ("v", "vote"),
+                    ("c", "reply"),
+                    ("u", "profile"),
+                ],
+                Pane::Comments => &[
+                    ("j/k", "nav"),
+                    ("Space", "collapse"),
+                    ("Tab", "←back"),
+                    ("o", "url"),
+                    ("O", "hn"),
+                    ("v", "vote"),
+                    ("c", "reply"),
+                    ("u", "profile"),
+                ],
+            };
+            let sep = Span::styled("  ", Style::default().fg(GRAY));
+            let divider = Span::styled(" │ ", Style::default().fg(Color::Rgb(60, 60, 60)));
+            let mut s = vec![Span::raw(" ")];
+            for (i, (key, desc)) in global.iter().enumerate() {
+                s.push(Span::styled(key.to_string(), Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)));
+                s.push(Span::styled(format!(" {desc}"), Style::default().fg(GRAY)));
+                if i < global.len() - 1 { s.push(sep.clone()); }
+            }
+            s.push(divider);
+            for (i, (key, desc)) in pane.iter().enumerate() {
+                s.push(Span::styled(key.to_string(), Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)));
+                s.push(Span::styled(format!(" {desc}"), Style::default().fg(GRAY)));
+                if i < pane.len() - 1 { s.push(sep.clone()); }
+            }
+            s
+        }
+    };
+
+    let p = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(Color::Rgb(20, 20, 20)));
     f.render_widget(p, area);
 }
 
