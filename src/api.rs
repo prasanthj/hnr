@@ -398,6 +398,25 @@ pub async fn search_stories(
     Ok(resp.hits.into_iter().filter_map(|h| h.into_item()).collect())
 }
 
+pub async fn fetch_readable(client: &reqwest::Client, url: &str) -> anyhow::Result<(String, String)> {
+    let html = client
+        .get(url)
+        .header("User-Agent", "Mozilla/5.0 (compatible; hnr/1.0)")
+        .send()
+        .await?
+        .text()
+        .await?;
+    let parsed = url::Url::parse(url)?;
+    let mut cursor = std::io::Cursor::new(html.as_bytes());
+    let product = readability::extractor::extract(&mut cursor, &parsed)?;
+    let text = if product.text.trim().is_empty() {
+        html2text::from_read(product.content.as_bytes(), 80)
+    } else {
+        product.text
+    };
+    Ok((product.title, text))
+}
+
 pub async fn fetch_latest_version(client: &reqwest::Client) -> anyhow::Result<String> {
     #[derive(Deserialize)]
     struct Krate { newest_version: String }

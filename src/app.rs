@@ -85,6 +85,12 @@ pub enum Mode {
     Login,
     Compose,
     Search,
+    Reader,
+}
+
+pub struct ReaderContent {
+    pub title: String,
+    pub text: String,
 }
 
 #[derive(Clone)]
@@ -150,6 +156,9 @@ pub struct App {
     pub search_query: Option<String>,
     pub search_base: String,
 
+    pub reader_content: Option<ReaderContent>,
+    pub reader_scroll: usize,
+
     pub loading: bool,
     pub client: reqwest::Client,
     pub api_base: String,
@@ -194,6 +203,8 @@ impl App {
             search_input: String::new(),
             search_query: None,
             search_base: "https://hn.algolia.com/api/v1".to_string(),
+            reader_content: None,
+            reader_scroll: 0,
             loading: false,
             client,
             api_base: HN_API_BASE.to_string(),
@@ -542,6 +553,29 @@ impl App {
                 self.comments.len()
             );
         }
+    }
+
+    pub async fn load_reader(&mut self) {
+        let url = match self.selected_story().and_then(|s| s.url.clone()) {
+            Some(u) => u,
+            None => { self.status_message = "No URL for this story.".into(); return; }
+        };
+        self.status_message = "Fetching article…".into();
+        let client = self.client.clone();
+        match crate::api::fetch_readable(&client, &url).await {
+            Ok((title, text)) => {
+                self.reader_content = Some(ReaderContent { title, text });
+                self.reader_scroll = 0;
+                self.mode = Mode::Reader;
+                self.status_message = String::new();
+            }
+            Err(e) => self.status_message = format!("Reader: {e}"),
+        }
+    }
+
+    pub fn close_reader(&mut self) {
+        self.reader_content = None;
+        self.mode = Mode::Normal;
     }
 
     pub fn start_search(&mut self) {

@@ -6,6 +6,7 @@ mod session;
 mod ui;
 
 use app::{App, Feed, LoginField, Mode, Pane, ViewMode};
+use std::cmp;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -61,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
                 Mode::Compose => handle_compose_keys(&mut app, key.code, key.modifiers).await,
                 Mode::Command => handle_command_keys(&mut app, key.code).await,
                 Mode::Search => handle_search_keys(&mut app, key.code).await,
+                Mode::Reader => handle_reader_keys(&mut app, key.code),
                 Mode::Normal => {
                     let h = terminal.size()?.height as usize;
                     handle_normal_keys(&mut app, key.code, key.modifiers, h).await;
@@ -206,7 +208,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     match code {
         KeyCode::Char('h') => {
             app.status_message =
-                "1-7:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  y:copy  v:vote  c:reply  p:profile  u:unread  b:bookmark  ?:search  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
+                "1-7:feeds  j/k:nav  Enter:open/expand  Tab/Esc:pane  Space:collapse  R:read  y:copy  v:vote  c:reply  p:profile  u:unread  b:bookmark  ?:search  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
                     .into();
             return;
         }
@@ -255,6 +257,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
             KeyCode::Char('y') => app.copy_url_to_clipboard(),
+            KeyCode::Char('R') => app.load_reader().await,
             _ => {}
         },
         Pane::Comments => match code {
@@ -278,8 +281,30 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
             KeyCode::Char('y') => app.copy_url_to_clipboard(),
+            KeyCode::Char('R') => app.load_reader().await,
             _ => {}
         },
+    }
+}
+
+fn handle_reader_keys(app: &mut App, code: KeyCode) {
+    let content_lines = app.reader_content.as_ref().map(|c| c.text.lines().count()).unwrap_or(0);
+    let visible = 40usize; // approximate; exact height not available here
+    match code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.reader_scroll = cmp::min(app.reader_scroll + 1, content_lines.saturating_sub(visible));
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.reader_scroll = app.reader_scroll.saturating_sub(1);
+        }
+        KeyCode::Char('d') => {
+            app.reader_scroll = cmp::min(app.reader_scroll + 20, content_lines.saturating_sub(visible));
+        }
+        KeyCode::Char('u') => {
+            app.reader_scroll = app.reader_scroll.saturating_sub(20);
+        }
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('R') => app.close_reader(),
+        _ => {}
     }
 }
 

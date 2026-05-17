@@ -32,6 +32,11 @@ pub fn draw(f: &mut Frame, app: &App) {
     match app.mode {
         Mode::Login => draw_login_overlay(f, app, area),
         Mode::Compose => draw_compose_overlay(f, app, area),
+        Mode::Reader => {
+            if let Some(content) = &app.reader_content {
+                draw_reader_overlay(f, content, app.reader_scroll, area);
+            }
+        }
         _ => {}
     }
 }
@@ -133,6 +138,14 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Esc", Style::default().fg(ORANGE)),
             Span::styled(" cancel", Style::default().fg(GRAY)),
         ],
+        Mode::Reader => vec![
+            Span::styled(" j/k", Style::default().fg(ORANGE)),
+            Span::styled(" scroll  ", Style::default().fg(GRAY)),
+            Span::styled("d/u", Style::default().fg(ORANGE)),
+            Span::styled(" page  ", Style::default().fg(GRAY)),
+            Span::styled("Esc", Style::default().fg(ORANGE)),
+            Span::styled(" close", Style::default().fg(GRAY)),
+        ],
         Mode::Normal => {
             let login_hint = if app.session.is_some() { "logout" } else { "login" };
             // global + pane-specific, every shortcut unique
@@ -148,13 +161,12 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                     ("j/k", "nav"),
                     ("Enter", "comments"),
                     ("Tab", "→pane"),
+                    ("R", "read"),
                     ("b", "bookmark"),
                     ("u", "unread"),
                     ("o", "url"),
-                    ("O", "hn"),
                     ("y", "copy url"),
                     ("v", "vote"),
-                    ("c", "reply"),
                     ("p", "profile"),
                 ],
                 Pane::Comments => &[
@@ -553,6 +565,37 @@ fn draw_compose_overlay(f: &mut Frame, app: &App, area: Rect) {
         .style(Style::default().bg(DARK))
         .wrap(Wrap { trim: false });
     f.render_widget(p, popup);
+}
+
+fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scroll: usize, area: Rect) {
+    let popup = centered_rect(90, 90, area);
+    f.render_widget(Clear, popup);
+
+    let title = format!(" {} ", content.title);
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(ORANGE))
+        .title_bottom(Line::from(Span::styled(
+            " j/k scroll  ·  Esc close ",
+            Style::default().fg(GRAY),
+        )));
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+
+    let width = inner.width as usize;
+    let lines: Vec<Line> = content
+        .text
+        .lines()
+        .skip(scroll)
+        .take(inner.height as usize)
+        .map(|l| {
+            let trimmed = l.chars().take(width).collect::<String>();
+            Line::from(Span::styled(trimmed, Style::default().fg(Color::White)))
+        })
+        .collect();
+    let p = Paragraph::new(lines).style(Style::default().bg(DARK));
+    f.render_widget(p, inner);
 }
 
 fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
