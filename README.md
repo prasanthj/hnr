@@ -17,6 +17,10 @@ Browse stories, read threaded comments, search, vote, reply, and bookmark — al
 - **Clipboard** — copy the story URL with `y`
 - **Session** — login cookie saved to `~/.hnr/session` and restored on next launch
 
+## Demo
+
+![hnr demo](demo.gif)
+
 ## Screenshot
 
 ![hnr screenshot](screenshot.png)
