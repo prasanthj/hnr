@@ -340,7 +340,8 @@ pub async fn fetch_vote_auth(
         .text()
         .await?;
 
-    let needle = format!("vote?id={item_id}&how=up&auth=");
+    // HN HTML-encodes & as &amp; inside href attributes
+    let needle = format!("vote?id={item_id}&amp;how=up&amp;auth=");
     if let Some(pos) = html.find(&needle) {
         let after = &html[pos + needle.len()..];
         let auth: String = after.chars().take_while(|c| c.is_alphanumeric()).collect();
@@ -348,7 +349,7 @@ pub async fn fetch_vote_auth(
             return Ok(auth);
         }
     }
-    anyhow::bail!("Vote auth not found — already voted or not eligible")
+    anyhow::bail!("Vote auth not found — already voted, or item is too old")
 }
 
 pub async fn vote_item(
