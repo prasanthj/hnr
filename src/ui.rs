@@ -484,6 +484,256 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(p, area);
 }
 
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::api::{make_item, User};
+    use crate::app::{App, ComposeState, Feed, LoginState, Mode, Pane, ViewMode};
+    use crate::session::Session;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    fn test_app(n: usize) -> App {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.stories = (1..=n as u64).map(make_item).collect();
+        app
+    }
+
+    fn render(app: &App) -> String {
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| draw(f, app)).unwrap();
+        terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect()
+    }
+
+    #[test]
+    fn story_list_renders_titles() {
+        let app = test_app(3);
+        let screen = render(&app);
+        assert!(screen.contains("Story 1"), "Story 1 missing");
+        assert!(screen.contains("Story 2"), "Story 2 missing");
+        assert!(screen.contains("Story 3"), "Story 3 missing");
+    }
+
+    #[test]
+    fn story_list_shows_score_and_author() {
+        let app = test_app(2);
+        let screen = render(&app);
+        assert!(screen.contains("100"), "score missing");
+        assert!(screen.contains("user1"), "author missing");
+    }
+
+    #[test]
+    fn header_shows_active_feed_top() {
+        let app = test_app(1);
+        let screen = render(&app);
+        assert!(screen.contains("1:Top"), "active Top feed label missing");
+    }
+
+    #[test]
+    fn header_shows_active_feed_new() {
+        let mut app = test_app(1);
+        app.feed = Feed::New;
+        let screen = render(&app);
+        assert!(screen.contains("2:New"), "active New feed label missing");
+    }
+
+    #[test]
+    fn header_shows_hnr_branding() {
+        let app = test_app(0);
+        let screen = render(&app);
+        assert!(screen.contains("hnr"), "hnr brand missing");
+    }
+
+    #[test]
+    fn hints_stories_pane_shows_nav_and_copy() {
+        let app = test_app(1);
+        let screen = render(&app);
+        assert!(screen.contains("j/k"), "nav hint missing");
+        assert!(screen.contains("copy url"), "copy url hint missing");
+    }
+
+    #[test]
+    fn hints_comments_pane_shows_collapse_and_copy() {
+        let mut app = test_app(1);
+        app.active_pane = Pane::Comments;
+        let screen = render(&app);
+        assert!(screen.contains("collapse"), "collapse hint missing");
+        assert!(screen.contains("copy url"), "copy url hint missing");
+    }
+
+    #[test]
+    fn empty_story_list_shows_placeholder() {
+        let client = reqwest::Client::new();
+        let app = App::new(client);
+        let screen = render(&app);
+        assert!(screen.contains("Select a story"), "placeholder missing");
+    }
+
+    #[test]
+    fn story_header_shows_score_and_author() {
+        let app = test_app(1);
+        let screen = render(&app);
+        assert!(screen.contains("user1"), "author in story header missing");
+        assert!(screen.contains("100"), "score in story header missing");
+    }
+
+    #[test]
+    fn story_header_shows_self_post_when_no_url() {
+        let mut app = test_app(1);
+        app.stories[0].url = None;
+        let screen = render(&app);
+        assert!(screen.contains("(self post)"), "self post indicator missing");
+    }
+
+    // ── Hints bar ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn hints_bar_shows_login_when_no_session() {
+        let app = test_app(1);
+        let screen = render(&app);
+        assert!(screen.contains("login"), "login hint missing when not logged in");
+    }
+
+    #[test]
+    fn hints_bar_shows_logout_when_logged_in() {
+        let mut app = test_app(1);
+        app.session = Some(Session { username: "pg".into(), cookie: "user=abc".into() });
+        let screen = render(&app);
+        assert!(screen.contains("logout"), "logout hint missing when logged in");
+    }
+
+    // ── Status bar ────────────────────────────────────────────────────────
+
+    #[test]
+    fn status_bar_shows_status_message() {
+        let mut app = test_app(0);
+        app.status_message = "42 stories loaded".into();
+        let screen = render(&app);
+        assert!(screen.contains("42 stories loaded"), "status message missing");
+    }
+
+    #[test]
+    fn status_bar_shows_command_input() {
+        let mut app = test_app(0);
+        app.mode = Mode::Command;
+        app.command_input = "top".into();
+        let screen = render(&app);
+        assert!(screen.contains(":top"), "command input missing");
+    }
+
+    // ── Login overlay ─────────────────────────────────────────────────────
+
+    #[test]
+    fn login_overlay_renders_fields() {
+        let mut app = test_app(0);
+        app.mode = Mode::Login;
+        let screen = render(&app);
+        assert!(screen.contains("Login to Hacker News"), "login dialog title missing");
+        assert!(screen.contains("Username"), "username label missing");
+        assert!(screen.contains("Password"), "password label missing");
+    }
+
+    #[test]
+    fn login_overlay_shows_typed_username() {
+        let mut app = test_app(0);
+        app.mode = Mode::Login;
+        app.login_state = LoginState { username: "alice".into(), ..LoginState::new() };
+        let screen = render(&app);
+        assert!(screen.contains("alice"), "username not displayed");
+    }
+
+    #[test]
+    fn login_overlay_shows_error() {
+        let mut app = test_app(0);
+        app.mode = Mode::Login;
+        app.login_state.error = "Bad credentials".into();
+        let screen = render(&app);
+        assert!(screen.contains("Bad credentials"), "login error not shown");
+    }
+
+    // ── Compose overlay ───────────────────────────────────────────────────
+
+    #[test]
+    fn compose_overlay_renders_reply_and_text() {
+        let mut app = test_app(1);
+        app.mode = Mode::Compose;
+        app.compose_state = Some(ComposeState {
+            text: "Hello HN!".into(),
+            parent_id: 1,
+            story_id: 1,
+            hmac: "abc".into(),
+            parent_by: "pg".into(),
+        });
+        let screen = render(&app);
+        assert!(screen.contains("Reply to pg"), "compose title missing");
+        assert!(screen.contains("Hello HN!"), "compose text missing");
+        assert!(screen.contains("Ctrl+S"), "submit hint missing");
+    }
+
+    // ── User profile ──────────────────────────────────────────────────────
+
+    #[test]
+    fn user_profile_renders_karma_and_about() {
+        let mut app = test_app(1);
+        app.view_mode = ViewMode::User;
+        app.user_profile = Some(User {
+            id: "pg".into(),
+            karma: 155000,
+            created: 0,
+            about: Some("<p>Lisp hacker</p>".into()),
+            submitted: Some(vec![1, 2, 3]),
+        });
+        let screen = render(&app);
+        assert!(screen.contains("pg"), "username missing");
+        assert!(screen.contains("155000"), "karma missing");
+        assert!(screen.contains("Lisp hacker"), "about text missing");
+    }
+
+    // ── Comments ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn comments_render_author_and_text() {
+        use crate::app::CommentNode;
+        let mut app = test_app(1);
+        app.active_pane = Pane::Comments;
+        let mut item = make_item(100);
+        item.text = Some("<p>Great post!</p>".into());
+        item.by = Some("alice".into());
+        app.comments = vec![CommentNode::new(item, 0)];
+        let screen = render(&app);
+        assert!(screen.contains("alice"), "commenter name missing");
+        assert!(screen.contains("Great post!"), "comment text missing");
+    }
+
+    #[test]
+    fn collapsed_comment_shows_expand_marker() {
+        use crate::app::CommentNode;
+        let mut app = test_app(1);
+        app.active_pane = Pane::Comments;
+        let child = CommentNode::new(make_item(101), 1);
+        let mut root = CommentNode::new(make_item(100), 0);
+        root.children = vec![child];
+        root.collapsed = true;
+        app.comments = vec![root];
+        let screen = render(&app);
+        assert!(screen.contains("[+]"), "expand marker missing for collapsed comment");
+    }
+
+    #[test]
+    fn expanded_comment_shows_collapse_marker() {
+        use crate::app::CommentNode;
+        let mut app = test_app(1);
+        app.active_pane = Pane::Comments;
+        let child = CommentNode::new(make_item(101), 1);
+        let mut root = CommentNode::new(make_item(100), 0);
+        root.children = vec![child];
+        app.comments = vec![root];
+        let screen = render(&app);
+        assert!(screen.contains("[-]"), "collapse marker missing for expanded comment");
+    }
+}
+
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let vert = Layout::default()
         .direction(Direction::Vertical)

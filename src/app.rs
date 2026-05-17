@@ -1,4 +1,6 @@
 use crate::api::{fetch_ask_ids, fetch_best_ids, fetch_new_ids, fetch_show_ids, fetch_top_ids, Item, User};
+
+const HN_API_BASE: &str = "https://hacker-news.firebaseio.com/v0";
 use crate::session::Session;
 use std::collections::HashMap;
 use arboard::Clipboard;
@@ -127,6 +129,7 @@ pub struct App {
 
     pub loading: bool,
     pub client: reqwest::Client,
+    pub api_base: String,
     pub item_cache: HashMap<u64, Item>,
     pub comment_pos_cache: HashMap<u64, (usize, usize)>, // story_id -> (cursor, scroll)
 }
@@ -153,6 +156,7 @@ impl App {
             compose_state: None,
             loading: false,
             client,
+            api_base: HN_API_BASE.to_string(),
             item_cache: HashMap::new(),
             comment_pos_cache: HashMap::new(),
         }
@@ -399,19 +403,20 @@ impl App {
         self.loading = true;
         self.status_message = format!("Loading {} stories...", self.feed.label());
         let client = self.client.clone();
+        let base = self.api_base.clone();
         let ids = match self.feed {
-            Feed::Top => fetch_top_ids(&client).await,
-            Feed::New => fetch_new_ids(&client).await,
-            Feed::Best => fetch_best_ids(&client).await,
-            Feed::Ask => fetch_ask_ids(&client).await,
-            Feed::Show => fetch_show_ids(&client).await,
+            Feed::Top => fetch_top_ids(&client, &base).await,
+            Feed::New => fetch_new_ids(&client, &base).await,
+            Feed::Best => fetch_best_ids(&client, &base).await,
+            Feed::Ask => fetch_ask_ids(&client, &base).await,
+            Feed::Show => fetch_show_ids(&client, &base).await,
         };
         match ids {
             Ok(mut ids) => {
                 ids.truncate(60);
                 self.story_ids = ids.clone();
                 self.status_message = format!("Fetching {} items...", ids.len());
-                let items = crate::api::fetch_items(&client, &ids).await;
+                let items = crate::api::fetch_items(&client, &ids, &base).await;
                 for item in &items {
                     self.item_cache.insert(item.id, item.clone());
                 }
@@ -446,7 +451,8 @@ impl App {
             }
             self.status_message = "Loading comments...".into();
             let client = self.client.clone();
-            let nodes = load_comment_tree(&client, &kids, 0).await;
+            let base = self.api_base.clone();
+            let nodes = load_comment_tree(&client, &kids, 0, &base).await;
             self.comments = nodes;
             let (cursor, scroll) = self.comment_pos_cache.get(&story_id).copied().unwrap_or((0, 0));
             self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
@@ -485,7 +491,8 @@ impl App {
         self.status_message = format!("Loading profile for {username}...");
         self.loading = true;
         let client = self.client.clone();
-        match crate::api::fetch_user(&client, &username).await {
+        let base = self.api_base.clone();
+        match crate::api::fetch_user(&client, &username, &base).await {
             Ok(user) => {
                 self.status_message = format!("{} | {} karma | Esc back", user.id, user.karma);
                 self.user_profile = Some(user);
@@ -523,7 +530,8 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::make_item;
+    use crate::api::{make_item, User};
+    use crate::session::Session;
 
     fn make_node(id: u64, children: Vec<CommentNode>) -> CommentNode {
         CommentNode { item: make_item(id), depth: 0, collapsed: false, children }
@@ -622,6 +630,14 @@ mod tests {
         let client = reqwest::Client::new();
         let mut app = App::new(client);
         app.stories = (1..=n as u64).map(make_item).collect();
+        app
+    }
+
+    fn make_app_with_comments(n: usize) -> App {
+        let mut app = make_app_with_stories(1);
+        app.comments = (100..100 + n as u64)
+            .map(|id| CommentNode::new(make_item(id), 0))
+            .collect();
         app
     }
 
@@ -736,8 +752,384 @@ mod tests {
         let client = reqwest::Client::new();
         let mut app = App::new(client);
         app.copy_url_to_clipboard();
-        // should not panic; status message unchanged from init
         assert!(!app.status_message.starts_with("Copied:"));
+    }
+
+    #[test]
+    fn copy_url_uses_story_url() {
+        let mut app = make_app_with_stories(1);
+        // make_item sets url = "https://example.com/1"
+        app.copy_url_to_clipboard();
+        let msg = &app.status_message;
+        assert!(
+            msg.starts_with("Copied: https://example.com/1")
+                || msg == "Failed to copy to clipboard"
+                || msg == "Clipboard unavailable",
+            "unexpected: {msg}"
+        );
+    }
+
+    #[test]
+    fn copy_url_falls_back_to_hn_url_when_no_story_url() {
+        let mut app = make_app_with_stories(1);
+        app.stories[0].url = None;
+        app.copy_url_to_clipboard();
+        let msg = &app.status_message;
+        assert!(
+            msg.starts_with("Copied: https://news.ycombinator.com/item?id=")
+                || msg == "Failed to copy to clipboard"
+                || msg == "Clipboard unavailable",
+            "unexpected: {msg}"
+        );
+    }
+
+    // ── Feed::label ───────────────────────────────────────────────────────
+
+    #[test]
+    fn feed_label_returns_correct_strings() {
+        assert_eq!(Feed::Top.label(), "Top");
+        assert_eq!(Feed::New.label(), "New");
+        assert_eq!(Feed::Best.label(), "Best");
+        assert_eq!(Feed::Ask.label(), "Ask HN");
+        assert_eq!(Feed::Show.label(), "Show HN");
+    }
+
+    // ── flat_comments ─────────────────────────────────────────────────────
+
+    #[test]
+    fn flat_comments_empty_when_no_comments() {
+        let app = make_app_with_stories(1);
+        assert!(app.flat_comments().is_empty());
+    }
+
+    #[test]
+    fn flat_comments_includes_nested_nodes() {
+        let mut app = make_app_with_stories(1);
+        let child = CommentNode::new(make_item(101), 1);
+        app.comments = vec![
+            CommentNode { item: make_item(100), depth: 0, collapsed: false, children: vec![child] },
+            CommentNode::new(make_item(102), 0),
+        ];
+        // root 100, child 101, root 102
+        assert_eq!(app.flat_comments().len(), 3);
+        assert_eq!(app.flat_comments()[0].0.item.id, 100);
+        assert_eq!(app.flat_comments()[1].0.item.id, 101);
+        assert_eq!(app.flat_comments()[2].0.item.id, 102);
+    }
+
+    // ── Comment scroll ────────────────────────────────────────────────────
+
+    #[test]
+    fn scroll_comment_down_increments_cursor() {
+        let mut app = make_app_with_comments(5);
+        app.scroll_comment_down(10);
+        assert_eq!(app.comment_cursor, 1);
+        assert_eq!(app.comment_scroll, 0);
+    }
+
+    #[test]
+    fn scroll_comment_down_advances_scroll_at_boundary() {
+        let mut app = make_app_with_comments(10);
+        for _ in 0..5 {
+            app.scroll_comment_down(5);
+        }
+        assert_eq!(app.comment_cursor, 5);
+        assert_eq!(app.comment_scroll, 1);
+    }
+
+    #[test]
+    fn scroll_comment_down_stops_at_end() {
+        let mut app = make_app_with_comments(3);
+        app.comment_cursor = 2;
+        app.scroll_comment_down(10);
+        assert_eq!(app.comment_cursor, 2);
+    }
+
+    #[test]
+    fn scroll_comment_up_decrements_cursor() {
+        let mut app = make_app_with_comments(5);
+        app.comment_cursor = 3;
+        app.comment_scroll = 2;
+        app.scroll_comment_up();
+        assert_eq!(app.comment_cursor, 2);
+        assert_eq!(app.comment_scroll, 2);
+    }
+
+    #[test]
+    fn scroll_comment_up_adjusts_scroll_when_cursor_above_window() {
+        let mut app = make_app_with_comments(5);
+        app.comment_cursor = 2;
+        app.comment_scroll = 3;
+        app.scroll_comment_up();
+        assert_eq!(app.comment_cursor, 1);
+        assert_eq!(app.comment_scroll, 1);
+    }
+
+    #[test]
+    fn scroll_comment_up_stops_at_zero() {
+        let mut app = make_app_with_comments(3);
+        app.scroll_comment_up();
+        assert_eq!(app.comment_cursor, 0);
+        assert_eq!(app.comment_scroll, 0);
+    }
+
+    // ── toggle_current_comment ────────────────────────────────────────────
+
+    #[test]
+    fn toggle_current_comment_collapses_and_expands() {
+        let child = CommentNode::new(make_item(101), 1);
+        let mut app = make_app_with_stories(1);
+        app.comments = vec![CommentNode {
+            item: make_item(100),
+            depth: 0,
+            collapsed: false,
+            children: vec![child],
+        }];
+        app.comment_cursor = 0;
+        app.toggle_current_comment();
+        assert!(app.comments[0].collapsed);
+        app.toggle_current_comment();
+        assert!(!app.comments[0].collapsed);
+    }
+
+    #[test]
+    fn toggle_current_comment_noop_when_no_comments() {
+        let mut app = make_app_with_stories(1);
+        app.toggle_current_comment(); // should not panic
+    }
+
+    // ── username_at_cursor ────────────────────────────────────────────────
+
+    #[test]
+    fn username_at_cursor_stories_pane() {
+        let app = make_app_with_stories(3);
+        // make_item(1) sets by = "user1"
+        assert_eq!(app.username_at_cursor(), Some("user1".to_string()));
+    }
+
+    #[test]
+    fn username_at_cursor_comments_pane() {
+        let mut app = make_app_with_stories(1);
+        app.active_pane = Pane::Comments;
+        app.comments = vec![CommentNode::new(make_item(100), 0)];
+        app.comment_cursor = 0;
+        assert_eq!(app.username_at_cursor(), Some("user100".to_string()));
+    }
+
+    #[test]
+    fn username_at_cursor_none_when_empty() {
+        let client = reqwest::Client::new();
+        let app = App::new(client);
+        assert!(app.username_at_cursor().is_none());
+    }
+
+    // ── start_login / logout ──────────────────────────────────────────────
+
+    #[test]
+    fn start_login_sets_mode_and_clears_state() {
+        let mut app = make_app_with_stories(1);
+        app.login_state.username = "old".into();
+        app.login_state.password = "pw".into();
+        app.start_login();
+        assert_eq!(app.mode, Mode::Login);
+        assert!(app.login_state.username.is_empty());
+        assert!(app.login_state.password.is_empty());
+    }
+
+    #[test]
+    fn logout_clears_session_and_sets_status() {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.session = Some(Session { username: "pg".into(), cookie: "user=abc".into() });
+        app.logout();
+        assert!(app.session.is_none());
+        assert!(app.status_message.contains("Logged out"), "got: {}", app.status_message);
+    }
+
+    // ── close_user_profile ────────────────────────────────────────────────
+
+    #[test]
+    fn close_user_profile_resets_view_mode_and_clears_profile() {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.view_mode = ViewMode::User;
+        app.user_profile = Some(User { id: "pg".into(), karma: 1, created: 0, about: None, submitted: None });
+        app.close_user_profile();
+        assert_eq!(app.view_mode, ViewMode::Story);
+        assert!(app.user_profile.is_none());
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use crate::api::make_item;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn test_app(base: &str) -> App {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        app.api_base = base.to_string();
+        app
+    }
+
+    #[tokio::test]
+    async fn load_feed_populates_stories() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/topstories.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([1, 2, 3])))
+            .mount(&server)
+            .await;
+        for id in 1u64..=3 {
+            Mock::given(method("GET"))
+                .and(path(format!("/item/{id}.json")))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "id": id, "type": "story",
+                    "title": format!("Story {id}"),
+                    "by": format!("user{id}"),
+                    "score": 100, "descendants": 5,
+                })))
+                .mount(&server)
+                .await;
+        }
+
+        let mut app = test_app(&server.uri());
+        app.load_feed().await;
+
+        assert_eq!(app.stories.len(), 3);
+        assert_eq!(app.stories[0].display_title(), "Story 1");
+        assert_eq!(app.stories[0].score(), 100);
+        assert!(app.status_message.contains("stories"), "got: {}", app.status_message);
+    }
+
+    #[tokio::test]
+    async fn load_feed_api_error_sets_error_status() {
+        let server = MockServer::start().await;
+        // No routes: wiremock returns 404 → JSON parse fails → Err propagates
+        let mut app = test_app(&server.uri());
+        app.load_feed().await;
+
+        assert!(app.status_message.starts_with("Error:"), "got: {}", app.status_message);
+        assert!(app.stories.is_empty());
+    }
+
+    #[tokio::test]
+    async fn load_feed_truncates_to_60_stories() {
+        let server = MockServer::start().await;
+        let ids: Vec<u64> = (1..=70).collect();
+        Mock::given(method("GET"))
+            .and(path("/topstories.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&ids))
+            .mount(&server)
+            .await;
+        for id in 1u64..=70 {
+            Mock::given(method("GET"))
+                .and(path(format!("/item/{id}.json")))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "id": id, "type": "story", "title": format!("Story {id}"),
+                    "by": "x", "score": 1,
+                })))
+                .mount(&server)
+                .await;
+        }
+
+        let mut app = test_app(&server.uri());
+        app.load_feed().await;
+
+        assert_eq!(app.stories.len(), 60, "should truncate to 60, got {}", app.stories.len());
+    }
+
+    #[tokio::test]
+    async fn load_comments_builds_tree() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/item/10.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10, "type": "comment",
+                "text": "<p>Hello world</p>",
+                "by": "alice",
+            })))
+            .mount(&server)
+            .await;
+
+        let mut app = test_app(&server.uri());
+        let mut story = make_item(1);
+        story.kids = Some(vec![10]);
+        app.stories = vec![story];
+
+        app.load_comments().await;
+
+        assert_eq!(app.comments.len(), 1);
+        assert_eq!(app.comments[0].item.id, 10);
+        assert_eq!(app.comments[0].item.display_by(), "alice");
+    }
+
+    #[tokio::test]
+    async fn load_user_populates_profile() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/user/pg.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "pg", "karma": 155000, "created": 1000000,
+                "about": "<p>Lisp hacker</p>", "submitted": [1, 2, 3]
+            })))
+            .mount(&server)
+            .await;
+
+        let mut app = test_app(&server.uri());
+        app.load_user("pg".to_string()).await;
+
+        let user = app.user_profile.as_ref().expect("user should be loaded");
+        assert_eq!(user.id, "pg");
+        assert_eq!(user.karma, 155000);
+        assert_eq!(user.submission_count(), 3);
+        assert_eq!(app.view_mode, ViewMode::User);
+    }
+
+    #[tokio::test]
+    async fn load_user_error_sets_error_status() {
+        let server = MockServer::start().await;
+        // No routes → 404 → JSON parse fails
+        let mut app = test_app(&server.uri());
+        app.load_user("nobody".to_string()).await;
+
+        assert!(app.user_profile.is_none());
+        assert!(
+            app.status_message.contains("Failed to load user"),
+            "got: {}",
+            app.status_message
+        );
+    }
+
+    #[tokio::test]
+    async fn load_comments_skips_deleted() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/item/10.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10, "deleted": true,
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/item/11.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 11, "type": "comment", "text": "alive", "by": "bob",
+            })))
+            .mount(&server)
+            .await;
+
+        let mut app = test_app(&server.uri());
+        let mut story = make_item(1);
+        story.kids = Some(vec![10, 11]);
+        app.stories = vec![story];
+
+        app.load_comments().await;
+
+        assert_eq!(app.comments.len(), 1, "deleted comment should be filtered");
+        assert_eq!(app.comments[0].item.id, 11);
     }
 }
 
@@ -751,8 +1143,13 @@ fn toggle_in_tree(nodes: &mut Vec<CommentNode>, id: u64) {
     }
 }
 
-async fn load_comment_tree(client: &reqwest::Client, ids: &[u64], depth: usize) -> Vec<CommentNode> {
-    let items = crate::api::fetch_items(client, ids).await;
+async fn load_comment_tree<'a>(
+    client: &'a reqwest::Client,
+    ids: &'a [u64],
+    depth: usize,
+    base: &'a str,
+) -> Vec<CommentNode> {
+    let items = crate::api::fetch_items(client, ids, base).await;
     let mut nodes = vec![];
     for item in items {
         if item.is_deleted_or_dead() {
@@ -761,7 +1158,7 @@ async fn load_comment_tree(client: &reqwest::Client, ids: &[u64], depth: usize) 
         let kids = item.kids.clone().unwrap_or_default();
         let mut node = CommentNode::new(item, depth);
         if !kids.is_empty() && depth < 6 {
-            node.children = Box::pin(load_comment_tree(client, &kids, depth + 1)).await;
+            node.children = Box::pin(load_comment_tree(client, &kids, depth + 1, base)).await;
         }
         nodes.push(node);
     }

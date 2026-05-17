@@ -1,6 +1,5 @@
 use serde::Deserialize;
 
-const BASE: &str = "https://hacker-news.firebaseio.com/v0";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Item {
@@ -68,9 +67,9 @@ impl Item {
     }
 }
 
-pub async fn fetch_top_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>> {
+pub async fn fetch_top_ids(client: &reqwest::Client, base: &str) -> anyhow::Result<Vec<u64>> {
     let ids: Vec<u64> = client
-        .get(format!("{BASE}/topstories.json"))
+        .get(format!("{base}/topstories.json"))
         .send()
         .await?
         .json()
@@ -78,9 +77,9 @@ pub async fn fetch_top_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>>
     Ok(ids)
 }
 
-pub async fn fetch_new_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>> {
+pub async fn fetch_new_ids(client: &reqwest::Client, base: &str) -> anyhow::Result<Vec<u64>> {
     let ids: Vec<u64> = client
-        .get(format!("{BASE}/newstories.json"))
+        .get(format!("{base}/newstories.json"))
         .send()
         .await?
         .json()
@@ -88,9 +87,9 @@ pub async fn fetch_new_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>>
     Ok(ids)
 }
 
-pub async fn fetch_best_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>> {
+pub async fn fetch_best_ids(client: &reqwest::Client, base: &str) -> anyhow::Result<Vec<u64>> {
     let ids: Vec<u64> = client
-        .get(format!("{BASE}/beststories.json"))
+        .get(format!("{base}/beststories.json"))
         .send()
         .await?
         .json()
@@ -98,9 +97,9 @@ pub async fn fetch_best_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>
     Ok(ids)
 }
 
-pub async fn fetch_ask_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>> {
+pub async fn fetch_ask_ids(client: &reqwest::Client, base: &str) -> anyhow::Result<Vec<u64>> {
     let ids: Vec<u64> = client
-        .get(format!("{BASE}/askstories.json"))
+        .get(format!("{base}/askstories.json"))
         .send()
         .await?
         .json()
@@ -108,9 +107,9 @@ pub async fn fetch_ask_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>>
     Ok(ids)
 }
 
-pub async fn fetch_show_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>> {
+pub async fn fetch_show_ids(client: &reqwest::Client, base: &str) -> anyhow::Result<Vec<u64>> {
     let ids: Vec<u64> = client
-        .get(format!("{BASE}/showstories.json"))
+        .get(format!("{base}/showstories.json"))
         .send()
         .await?
         .json()
@@ -118,9 +117,9 @@ pub async fn fetch_show_ids(client: &reqwest::Client) -> anyhow::Result<Vec<u64>
     Ok(ids)
 }
 
-pub async fn fetch_item(client: &reqwest::Client, id: u64) -> anyhow::Result<Item> {
+pub async fn fetch_item(client: &reqwest::Client, id: u64, base: &str) -> anyhow::Result<Item> {
     let item: Item = client
-        .get(format!("{BASE}/item/{id}.json"))
+        .get(format!("{base}/item/{id}.json"))
         .send()
         .await?
         .json()
@@ -128,10 +127,10 @@ pub async fn fetch_item(client: &reqwest::Client, id: u64) -> anyhow::Result<Ite
     Ok(item)
 }
 
-pub async fn fetch_items(client: &reqwest::Client, ids: &[u64]) -> Vec<Item> {
+pub async fn fetch_items(client: &reqwest::Client, ids: &[u64], base: &str) -> Vec<Item> {
     let futures: Vec<_> = ids
         .iter()
-        .map(|&id| fetch_item(client, id))
+        .map(|&id| fetch_item(client, id, base))
         .collect();
     let results = futures::future::join_all(futures).await;
     results.into_iter().flatten().collect()
@@ -336,9 +335,9 @@ mod tests {
     }
 }
 
-pub async fn fetch_user(client: &reqwest::Client, username: &str) -> anyhow::Result<User> {
+pub async fn fetch_user(client: &reqwest::Client, username: &str, base: &str) -> anyhow::Result<User> {
     let user: User = client
-        .get(format!("{BASE}/user/{username}.json"))
+        .get(format!("{base}/user/{username}.json"))
         .send()
         .await?
         .json()

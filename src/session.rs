@@ -84,4 +84,43 @@ mod tests {
             assert!(Session::load().is_none());
         });
     }
+
+    fn write_session_file(content: &str) {
+        let home = std::env::var("HOME").unwrap();
+        let dir = std::path::PathBuf::from(home).join(".hnr");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("session"), content).unwrap();
+    }
+
+    #[test]
+    fn load_returns_none_when_username_empty() {
+        with_temp_home(|| {
+            write_session_file("\nsome_cookie");
+            assert!(Session::load().is_none());
+        });
+    }
+
+    #[test]
+    fn load_returns_none_when_cookie_empty() {
+        with_temp_home(|| {
+            write_session_file("username\n");
+            assert!(Session::load().is_none());
+        });
+    }
+
+    #[test]
+    fn load_returns_none_when_only_one_line() {
+        with_temp_home(|| {
+            write_session_file("username_only_no_newline");
+            assert!(Session::load().is_none());
+        });
+    }
+
+    #[test]
+    fn delete_is_noop_when_no_file() {
+        with_temp_home(|| {
+            Session::delete(); // should not panic
+            assert!(Session::load().is_none());
+        });
+    }
 }
