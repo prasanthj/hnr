@@ -1,6 +1,7 @@
 use crate::api::{fetch_ask_ids, fetch_best_ids, fetch_new_ids, fetch_show_ids, fetch_top_ids, Item, User};
 use crate::session::Session;
 use std::collections::HashMap;
+use arboard::Clipboard;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Feed {
@@ -127,6 +128,7 @@ pub struct App {
     pub loading: bool,
     pub client: reqwest::Client,
     pub item_cache: HashMap<u64, Item>,
+    pub comment_pos_cache: HashMap<u64, (usize, usize)>, // story_id -> (cursor, scroll)
 }
 
 impl App {
@@ -152,6 +154,7 @@ impl App {
             loading: false,
             client,
             item_cache: HashMap::new(),
+            comment_pos_cache: HashMap::new(),
         }
     }
 
@@ -434,6 +437,7 @@ impl App {
 
     pub async fn load_comments(&mut self) {
         if let Some(story) = self.selected_story().cloned() {
+            let story_id = story.id;
             let kids = story.kids.clone().unwrap_or_default();
             if kids.is_empty() {
                 self.status_message = "No comments.".into();
@@ -444,12 +448,36 @@ impl App {
             let client = self.client.clone();
             let nodes = load_comment_tree(&client, &kids, 0).await;
             self.comments = nodes;
-            self.comment_cursor = 0;
-            self.comment_scroll = 0;
+            let (cursor, scroll) = self.comment_pos_cache.get(&story_id).copied().unwrap_or((0, 0));
+            self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
+            self.comment_scroll = scroll;
             self.status_message = format!(
                 "{} top-level threads | j/k | Space collapse | u profile | v vote | c reply | Tab back",
                 self.comments.len()
             );
+        }
+    }
+
+    pub fn save_comment_pos(&mut self) {
+        if let Some(story) = self.selected_story() {
+            self.comment_pos_cache.insert(story.id, (self.comment_cursor, self.comment_scroll));
+        }
+    }
+
+    pub fn copy_url_to_clipboard(&mut self) {
+        if let Some(story) = self.selected_story() {
+            let url = story.url.clone()
+                .unwrap_or_else(|| format!("https://news.ycombinator.com/item?id={}", story.id));
+            match Clipboard::new() {
+                Ok(mut cb) => {
+                    if cb.set_text(&url).is_ok() {
+                        self.status_message = format!("Copied: {url}");
+                    } else {
+                        self.status_message = "Failed to copy to clipboard".into();
+                    }
+                }
+                Err(_) => self.status_message = "Clipboard unavailable".into(),
+            }
         }
     }
 

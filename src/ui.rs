@@ -120,6 +120,7 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                     ("Tab", "→pane"),
                     ("o", "url"),
                     ("O", "hn"),
+                    ("y", "copy url"),
                     ("v", "vote"),
                     ("c", "reply"),
                     ("u", "profile"),
@@ -127,9 +128,10 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                 Pane::Comments => &[
                     ("j/k", "nav"),
                     ("Space", "collapse"),
-                    ("Tab", "←back"),
+                    ("Esc", "←back"),
                     ("o", "url"),
                     ("O", "hn"),
+                    ("y", "copy url"),
                     ("v", "vote"),
                     ("c", "reply"),
                     ("u", "profile"),
@@ -181,7 +183,8 @@ fn draw_story_list(f: &mut Frame, app: &App, area: Rect) {
         .map(|(i, story)| {
             let selected = i == app.story_cursor;
             let rank = format!("{:>3}. ", i + 1);
-            let meta = format!(" ▲{} {} | {} comments", story.score(), story.display_by(), story.comment_count());
+            let ago = story.time_ago();
+            let meta = format!(" ▲{} {} | {} comments{}", story.score(), story.display_by(), story.comment_count(), if ago.is_empty() { String::new() } else { format!(" | {ago}") });
 
             let title_style = if selected {
                 Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)
@@ -244,7 +247,8 @@ fn draw_detail_panel(f: &mut Frame, app: &App, area: Rect) {
 
 fn draw_story_header(f: &mut Frame, story: &crate::api::Item, area: Rect) {
     let url = story.url.as_deref().unwrap_or("(self post)");
-    let meta = format!("▲ {}  by {}  | {} comments  | o: url  O: HN", story.score(), story.display_by(), story.comment_count());
+    let ago = story.time_ago();
+    let meta = format!("▲ {}  by {}  {}  | {} comments  | o: url  O: HN", story.score(), story.display_by(), ago, story.comment_count());
     let text_body = story.text_plain();
 
     let mut lines = vec![

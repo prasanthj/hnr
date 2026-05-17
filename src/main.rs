@@ -168,7 +168,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     match code {
         KeyCode::Char('h') => {
             app.status_message =
-                "1-5:feeds  j/k:nav  Enter:comments  Tab:pane  Space:collapse  v:vote  c:reply  u:profile  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
+                "1-5:feeds  j/k:nav  Enter:comments  Tab/Esc:pane  Space:collapse  y:copy url  v:vote  c:reply  u:profile  o:url  O:hn  r:refresh  l:login/logout  /:cmd  q:quit"
                     .into();
             return;
         }
@@ -212,13 +212,17 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('c') => app.start_compose().await,
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
+            KeyCode::Char('y') => app.copy_url_to_clipboard(),
             _ => {}
         },
         Pane::Comments => match code {
             KeyCode::Char('j') | KeyCode::Down  => app.scroll_comment_down(visible),
             KeyCode::Char('k') | KeyCode::Up    => app.scroll_comment_up(),
             KeyCode::Char(' ')                   => app.toggle_current_comment(),
-            KeyCode::Tab | KeyCode::Esc          => app.active_pane = Pane::Stories,
+            KeyCode::Tab | KeyCode::Esc          => {
+                app.save_comment_pos();
+                app.active_pane = Pane::Stories;
+            }
             KeyCode::Char('u') => {
                 if let Some(name) = app.username_at_cursor() {
                     app.load_user(name).await;
@@ -228,6 +232,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('c') => app.start_compose().await,
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
+            KeyCode::Char('y') => app.copy_url_to_clipboard(),
             _ => {}
         },
     }

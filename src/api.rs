@@ -44,6 +44,22 @@ impl Item {
         self.deleted.unwrap_or(false) || self.dead.unwrap_or(false)
     }
 
+    pub fn time_ago(&self) -> String {
+        let t = match self.time {
+            Some(t) => t,
+            None => return String::new(),
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let secs = now.saturating_sub(t);
+        if secs < 60 { format!("{secs}s ago") }
+        else if secs < 3600 { format!("{}m ago", secs / 60) }
+        else if secs < 86400 { format!("{}h ago", secs / 3600) }
+        else { format!("{}d ago", secs / 86400) }
+    }
+
     pub fn text_plain(&self) -> String {
         match &self.text {
             Some(t) => html2text::from_read(t.as_bytes(), 80),
