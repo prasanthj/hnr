@@ -1,24 +1,21 @@
 # hnr
 
-A fast terminal UI for Hacker News built with Rust and [ratatui](https://ratatui.rs).
+### A terminal UI for Hacker News
 
-```
- hnr │ 1:Top  2:New  3:Best  4:Ask  5:Show  6:Bookmarks
-┌─────────────────────────────┐┌──────────────────────────────────────┐
-│ Top Stories                 ││ Story                                │
-│  1. Rust 2025 Edition       ││ Rust 2025 Edition                    │
-│     ▲482 nincrementum | 91c ││ blog.rust-lang.org                   │
-│  2. Show HN: hnr — TUI for  ││ ▲482  by nincrementum  2h  | 91 cmts │
-│     ▲347 pg | 64 comments   │└──────────────────────────────────────┘
-│  3. Ask HN: Best keymaps?   │┌── Comments ────────────────────────── ┐
-│     ▲201 tptacek | 38 cmts  ││ ▸ nincrementum [-]                   │
-│                             ││   Great release overall...           │
-│                             ││   ▸ patio11                         │
-│                             ││     Agreed, async is finally...      │
-└─────────────────────────────┘└──────────────────────────────────────┘
-```
+Browse stories, read threaded comments, search, vote, reply, and bookmark — all without leaving the terminal. Built with Rust and [ratatui](https://ratatui.rs).
 
-**Feeds · Threaded comments · Search · Bookmarks · Voting · Replies · Profiles**
+## Features
+
+- **Five feeds** — Top, New, Best, Ask HN, Show HN
+- **Threaded comments** — recursive tree with collapse/expand and a full-text overlay
+- **Search** — Algolia-powered full-text search; press `?` to open, results drop into the story list
+- **Bookmarks** — save stories with `b`, browse them on feed `6`, persisted to `~/.hnr/bookmarks.json`
+- **Voting & replies** — upvote or reply to any story or comment when logged in
+- **User profiles** — view karma, bio, and submission count for any author
+- **Clipboard** — copy the story URL with `y`
+- **Session** — login cookie saved to `~/.hnr/session` and restored on next launch
+
+## Screenshot
 
 ![hnr screenshot](screenshot.png)
 
@@ -40,21 +37,21 @@ hnr
 |-----|--------|
 | `1` – `6` | Switch feed: Top / New / Best / Ask / Show / Bookmarks |
 | `j` / `k` / `↑` / `↓` | Navigate up/down |
-| `Enter` | Open comments (story pane) · Full text overlay (comment pane) |
+| `Enter` | Open comments (story pane) · Full-text overlay (comment pane) |
 | `Tab` | Switch between story list and comments pane |
-| `Esc` | Back to story pane (from comments) · Close overlay |
+| `Esc` | Back to story pane · Close overlay |
 | `Space` | Collapse / expand comment thread |
-| `b` | Bookmark / unbookmark selected story (★) |
+| `b` | Bookmark / unbookmark selected story |
 | `?` | Search stories via Algolia |
 | `v` | Vote on selected story or comment |
 | `c` | Reply to selected story or comment |
-| `u` | View author profile (karma, about) |
+| `u` | View author profile |
 | `o` | Open story URL in browser |
 | `O` | Open HN discussion page in browser |
 | `y` | Copy story URL to clipboard |
 | `l` | Login / logout |
 | `r` | Refresh current feed |
-| `h` | Show help / shortcut reference |
+| `h` | Show help |
 | `/` | Command mode |
 | `q` | Quit |
 
