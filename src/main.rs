@@ -16,6 +16,10 @@ use std::{io, time::Duration};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("hnr {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
