@@ -2,6 +2,24 @@
 
 A fast terminal UI for Hacker News built with Rust and [ratatui](https://ratatui.rs).
 
+```
+ hnr │ 1:Top  2:New  3:Best  4:Ask  5:Show  6:Bookmarks
+┌─────────────────────────────┐┌──────────────────────────────────────┐
+│ Top Stories                 ││ Story                                │
+│  1. Rust 2025 Edition       ││ Rust 2025 Edition                    │
+│     ▲482 nincrementum | 91c ││ blog.rust-lang.org                   │
+│  2. Show HN: hnr — TUI for  ││ ▲482  by nincrementum  2h  | 91 cmts │
+│     ▲347 pg | 64 comments   │└──────────────────────────────────────┘
+│  3. Ask HN: Best keymaps?   │┌── Comments ────────────────────────── ┐
+│     ▲201 tptacek | 38 cmts  ││ ▸ nincrementum [-]                   │
+│                             ││   Great release overall...           │
+│                             ││   ▸ patio11                         │
+│                             ││     Agreed, async is finally...      │
+└─────────────────────────────┘└──────────────────────────────────────┘
+```
+
+**Feeds · Threaded comments · Search · Bookmarks · Voting · Replies · Profiles**
+
 ![hnr screenshot](screenshot.png)
 
 ## Install
@@ -48,17 +66,6 @@ hnr
 /user <n>   /bookmark   /open       /hn         /vote
 /help       /quit
 ```
-
-## Features
-
-- **Feeds** — Top, New, Best, Ask HN, Show HN
-- **Threaded comments** — recursive tree with collapse/expand (`Space`) and full-text overlay (`Enter`)
-- **Bookmarks** — press `b` to save/remove; browse saved stories with `6` (persisted to `~/.hnr/bookmarks.json`)
-- **Search** — press `?`, type a query, press `Enter` to search via Algolia; results appear in the story list with normal navigation; switch to any numbered feed to clear search
-- **Voting & replies** — upvote or reply to any story or comment when logged in
-- **User profiles** — press `u` to view karma, bio, and submission count for any author
-- **Clipboard** — press `y` to copy the story URL
-- **Session** — login cookie saved to `~/.hnr/session` and restored on next launch
 
 ## License
 
