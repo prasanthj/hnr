@@ -32,15 +32,27 @@ Sleep 500ms
 Type "j"
 Sleep 500ms
 Type "j"
-Sleep 500ms
-Type "j"
-Sleep 500ms
-Type "j"
 Sleep 600ms
 
-# Open comments
+# Reader mode
+Type "r"
+Sleep 5s
+
+# Scroll article
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
+
+# Close reader
+Escape
+Sleep 800ms
+
+# Fetch comments
 Enter
-Sleep 3500ms
+Sleep 4000ms
 
 # Navigate comments
 Type "j"
@@ -48,7 +60,15 @@ Sleep 400ms
 Type "j"
 Sleep 400ms
 Type "j"
-Sleep 400ms
+Sleep 500ms
+
+# Collapse a thread
+Type " "
+Sleep 800ms
+
+# Expand it back
+Type " "
+Sleep 600ms
 
 # Expand comment inline
 Enter
@@ -56,16 +76,16 @@ Sleep 2000ms
 
 # Collapse it
 Enter
+Sleep 600ms
+
+# Switch back to stories
+Tab
 Sleep 800ms
 
-# Back to stories
-Escape
-Sleep 800ms
-
-# Search
+# Algolia search
 Type "?"
 Sleep 700ms
-Type "rust async"
+Type "golang"
 Sleep 500ms
 Enter
 Sleep 4s
@@ -77,14 +97,6 @@ Type "j"
 Sleep 400ms
 Type "j"
 Sleep 400ms
-
-# Bookmark a result
-Type "b"
-Sleep 1000ms
-
-# Switch to bookmarks
-Type "7"
-Sleep 2s
 
 # Quit
 Type "q"
