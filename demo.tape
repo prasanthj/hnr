@@ -23,51 +23,67 @@ Type "hnr"
 Enter
 Sleep 4s
 
-# Switch to Best feed — longer, meatier articles
+# Quickly scroll through a few Top stories
+Type "j"
+Sleep 150ms
+Type "j"
+Sleep 150ms
+Type "j"
+Sleep 150ms
+Type "j"
+Sleep 150ms
+Type "j"
+Sleep 150ms
+Type "j"
+Sleep 200ms
+
+# Switch to Best feed
 Type "3"
 Sleep 4s
 
-# Story 1 on Best
+# Move to second article
+Type "j"
+Sleep 500ms
+
+# Open reader
 Type "r"
-Sleep 12s
+Sleep 10s
 
-# Line scroll to show content moving
+# Scroll line by line
 Type "j"
-Sleep 300ms
+Sleep 250ms
 Type "j"
-Sleep 300ms
+Sleep 250ms
 Type "j"
-Sleep 300ms
+Sleep 250ms
 Type "j"
-Sleep 300ms
+Sleep 250ms
 Type "j"
-Sleep 300ms
+Sleep 250ms
 
-# Jump between sections
+# Section jumps
 Type "n"
-Sleep 1400ms
+Sleep 1200ms
 Type "n"
-Sleep 1400ms
-
-# Half-page down
-Type "d"
-Sleep 1000ms
-Type "d"
-Sleep 1000ms
-
-# Jump to end
-Type "G"
 Sleep 1200ms
 
-# Back to top
-Type "g"
+# Page down
+Type "d"
+Sleep 900ms
+Type "d"
+Sleep 900ms
+
+# Jump to end then back to top
+Type "G"
 Sleep 1000ms
+Type "g"
+Sleep 900ms
 
 # Close reader
 Escape
 Sleep 700ms
 
-# Fetch threaded comments
+# Fetch comments
 Enter
 Sleep 4500ms
 
@@ -78,38 +94,32 @@ Type "j"
 Sleep 300ms
 Type "j"
 Sleep 300ms
-Type "j"
-Sleep 300ms
 
-# Collapse a thread
+# Expand inline
+Enter
+Sleep 1200ms
+
+# Collapse thread
 Type " "
-Sleep 800ms
-Type " "
-Sleep 600ms
-
-# View author profile — press p
-Type "p"
-Sleep 2500ms
-Escape
-Sleep 700ms
-
-# Switch back to stories
-Tab
-Sleep 600ms
-
-# Bookmark the story
-Type "b"
-Sleep 700ms
-
-# Browse the bookmark feed
-Type "7"
-Sleep 1500ms
-
-# Back to top feed
-Type "1"
 Sleep 900ms
 
-# Full-text search via Algolia
+# Expand back
+Type " "
+Sleep 700ms
+
+# Upvote
+Type "v"
+Sleep 1000ms
+
+# Yank URL
+Type "y"
+Sleep 800ms
+
+# Back to stories pane
+Tab
+Sleep 500ms
+
+# Algolia search
 Type "?"
 Sleep 500ms
 Type "ratatui"
@@ -117,30 +127,22 @@ Sleep 400ms
 Enter
 Sleep 4s
 
-# Browse results — pause so viewer reads them
+# Navigate to 4th result
 Type "j"
-Sleep 350ms
+Sleep 300ms
 Type "j"
-Sleep 350ms
-Sleep 2000ms
+Sleep 300ms
+Type "j"
+Sleep 300ms
+Sleep 1800ms
 
-# Bookmark this search result — pause to show star appear
+# Bookmark 4th result
 Type "b"
 Sleep 2000ms
 
-# Show bookmark feed — pause to show the saved story
+# Switch to bookmark feed
 Type "7"
 Sleep 3000ms
-
-# Back to top feed
-Type "1"
-Sleep 900ms
-
-# Login modal — shows hnr supports voting and replies
-Type "l"
-Sleep 1800ms
-Escape
-Sleep 500ms
 
 # Quit
 Type "q"
