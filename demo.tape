@@ -15,18 +15,12 @@ Enter
 Sleep 500ms
 Show
 
-# Show install command
-Type "cargo install hnr"
-Sleep 1s
-Enter
-Sleep 6s
-
 # Launch
 Type "hnr"
 Enter
-Sleep 5s
+Sleep 4s
 
-# Browse top stories
+# Browse — seen stories are dimmed automatically
 Type "j"
 Sleep 500ms
 Type "j"
@@ -34,69 +28,87 @@ Sleep 500ms
 Type "j"
 Sleep 600ms
 
-# Reader mode
+# Reader mode — structured rendering unique to hnr
 Type "r"
-Sleep 5s
+Sleep 6s
 
-# Scroll article
-Type "j"
-Sleep 400ms
-Type "j"
-Sleep 400ms
-Type "j"
-Sleep 400ms
+# Jump between article sections with n
+Type "n"
+Sleep 1200ms
+Type "n"
+Sleep 1200ms
+
+# Page down
+Type "d"
+Sleep 900ms
 
 # Close reader
 Escape
-Sleep 800ms
+Sleep 700ms
 
-# Fetch comments
+# Fetch threaded comments
 Enter
-Sleep 4000ms
+Sleep 4500ms
 
-# Navigate comments
+# Navigate comment tree
 Type "j"
-Sleep 400ms
+Sleep 300ms
 Type "j"
-Sleep 400ms
+Sleep 300ms
 Type "j"
-Sleep 500ms
+Sleep 300ms
+Type "j"
+Sleep 300ms
 
 # Collapse a thread
 Type " "
 Sleep 800ms
-
-# Expand it back
 Type " "
 Sleep 600ms
 
-# Expand comment inline
-Enter
-Sleep 2000ms
-
-# Collapse it
-Enter
-Sleep 600ms
+# View author profile — press p
+Type "p"
+Sleep 2500ms
+Escape
+Sleep 700ms
 
 # Switch back to stories
 Tab
-Sleep 800ms
+Sleep 600ms
 
-# Algolia search
-Type "?"
+# Bookmark the story
+Type "b"
 Sleep 700ms
-Type "golang"
+
+# Browse the bookmark feed
+Type "7"
+Sleep 1500ms
+
+# Back to top feed
+Type "1"
+Sleep 900ms
+
+# Login modal — shows hnr supports voting and replies
+Type "l"
+Sleep 1800ms
+Escape
 Sleep 500ms
+
+# Full-text search via Algolia
+Type "?"
+Sleep 500ms
+Type "rust async"
+Sleep 400ms
 Enter
 Sleep 4s
 
 # Browse results
 Type "j"
-Sleep 400ms
+Sleep 350ms
 Type "j"
-Sleep 400ms
+Sleep 350ms
 Type "j"
-Sleep 400ms
+Sleep 350ms
 
 # Quit
 Type "q"
