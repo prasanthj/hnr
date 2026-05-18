@@ -569,15 +569,23 @@ impl App {
             }
             self.comments = vec![];
             self.comments_story_id = Some(story_id);
-            let kids = story.kids.clone().unwrap_or_default();
-            if kids.is_empty() {
-                self.status_message = "No comments.".into();
-                return;
-            }
             self.comments_loading = true;
             self.status_message = "Loading comments...".into();
             let client = self.client.clone();
             let base = self.api_base.clone();
+            // Algolia results have no kids — hydrate from HN to get real ids
+            let kids = match story.kids.clone() {
+                Some(k) if !k.is_empty() => k,
+                _ => match crate::api::fetch_item(&client, story_id, &base).await {
+                    Ok(item) => item.kids.unwrap_or_default(),
+                    Err(_) => { self.status_message = "Failed to load comments.".into(); self.comments_loading = false; return; }
+                },
+            };
+            if kids.is_empty() {
+                self.status_message = "No comments.".into();
+                self.comments_loading = false;
+                return;
+            }
             let nodes = load_comment_tree(&client, &kids, 0, &base).await;
             self.comments = nodes;
             self.comments_loading = false;
@@ -648,7 +656,8 @@ impl App {
 
     pub fn maybe_start_prefetch(&mut self) {
         let story = match self.selected_story() {
-            Some(s) if s.kids.as_ref().map_or(0, |k| k.len()) > 0 => s.clone(),
+            Some(s) if s.kids.as_ref().map_or(0, |k| k.len()) > 0
+                || s.descendants.unwrap_or(0) > 0 => s.clone(),
             _ => return,
         };
         let story_id = story.id;
@@ -670,8 +679,16 @@ impl App {
         let client = self.client.clone();
         let base = self.api_base.clone();
         let pending = self.pending_comments.clone();
-        let kids = story.kids.clone().unwrap_or_default();
+        let kids = story.kids.clone();
         tokio::spawn(async move {
+            // Algolia results have no kids — hydrate from HN to get real ids
+            let kids = match kids {
+                Some(k) if !k.is_empty() => k,
+                _ => match crate::api::fetch_item(&client, story_id, &base).await {
+                    Ok(item) => item.kids.unwrap_or_default(),
+                    Err(_) => return,
+                },
+            };
             let nodes = load_comment_tree(&client, &kids, 0, &base).await;
             if let Ok(mut lock) = pending.lock() {
                 *lock = Some((story_id, nodes));
@@ -710,11 +727,13 @@ impl App {
 
     pub fn tick_progress(&mut self) {
         let story_id = self.selected_story().map(|s| s.id);
-        let has_kids = self.selected_story()
-            .map_or(false, |s| s.kids.as_ref().map_or(0, |k| k.len()) > 0);
+        let has_comments = self.selected_story().map_or(false, |s| {
+            s.kids.as_ref().map_or(0, |k| k.len()) > 0
+                || s.descendants.unwrap_or(0) > 0
+        });
         let comments_ready = self.comments_story_id == story_id && !self.comments.is_empty();
 
-        if !has_kids || comments_ready {
+        if !has_comments || comments_ready {
             self.progress = None;
         } else if self.progress.is_none() {
             self.progress = Some(Progress::new("Fetching comments"));
@@ -735,6 +754,7 @@ impl App {
         }
         self.mode = Mode::Normal;
         self.loading = true;
+        self.progress = Some(Progress::new("Searching"));
         self.status_message = format!("Searching for '{query}'...");
         let client = self.client.clone();
         let base = self.search_base.clone();
@@ -760,6 +780,7 @@ impl App {
             }
         }
         self.loading = false;
+        self.progress = None;
     }
 
     pub fn toggle_bookmark(&mut self) {
@@ -1697,6 +1718,91 @@ mod integration_tests {
 
         assert_eq!(app.comments.len(), 1, "deleted comment should be filtered");
         assert_eq!(app.comments[0].item.id, 11);
+    }
+
+    // ── Algolia / search result comment loading ───────────────────────────
+
+    fn algolia_node(id: u64) -> CommentNode {
+        CommentNode { item: make_item(id), text: String::new(), depth: 0, collapsed: false, children: vec![] }
+    }
+
+    #[test]
+    fn tick_progress_shows_for_algolia_story_with_descendants() {
+        // Algolia items have kids=None but descendants>0 — progress should show
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        let mut story = make_item(1);
+        story.kids = None;
+        story.descendants = Some(42);
+        app.stories = vec![story];
+
+        app.tick_progress();
+
+        assert!(app.progress.is_some(), "should show Fetching comments when descendants>0 and kids=None");
+    }
+
+    #[test]
+    fn tick_progress_hidden_when_no_descendants() {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        let mut story = make_item(1);
+        story.kids = None;
+        story.descendants = Some(0);
+        app.stories = vec![story];
+
+        app.tick_progress();
+
+        assert!(app.progress.is_none());
+    }
+
+    #[tokio::test]
+    async fn load_comments_hydrates_kids_from_hn_for_algolia_story() {
+        let server = MockServer::start().await;
+        // HN item endpoint returns kids that Algolia didn't provide
+        Mock::given(method("GET"))
+            .and(path("/item/1.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 1, "type": "story", "title": "Story 1",
+                "kids": [10], "descendants": 1,
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/item/10.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10, "type": "comment", "text": "hello", "by": "alice",
+            })))
+            .mount(&server)
+            .await;
+
+        let mut app = test_app(&server.uri());
+        let mut story = make_item(1);
+        story.kids = None; // Algolia-style: no kids
+        story.descendants = Some(1);
+        app.stories = vec![story];
+
+        app.load_comments().await;
+
+        assert_eq!(app.comments.len(), 1);
+        assert_eq!(app.comments[0].item.id, 10);
+    }
+
+    #[tokio::test]
+    async fn load_comments_uses_cache_when_prefetched() {
+        let client = reqwest::Client::new();
+        let mut app = App::new(client);
+        let mut story = make_item(1);
+        story.kids = Some(vec![10]);
+        app.stories = vec![story];
+        // Simulate already-prefetched comments
+        app.comments_story_id = Some(1);
+        app.comments = vec![algolia_node(10)];
+
+        app.load_comments().await;
+
+        // Should reuse cache, not re-fetch (no network available in this test)
+        assert_eq!(app.comments.len(), 1);
+        assert_eq!(app.comments[0].item.id, 10);
     }
 }
 
