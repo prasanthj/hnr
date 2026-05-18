@@ -12,6 +12,9 @@ Set TypingSpeed 80ms
 Hide
 Type "export PATH=$HOME/.cargo/bin:$PATH"
 Enter
+Sleep 200ms
+Type "cp /Users/prasanth/work/fun/hnr/target/release/hnr ~/.cargo/bin/hnr"
+Enter
 Sleep 500ms
 Show
 
@@ -20,67 +23,51 @@ Type "hnr"
 Enter
 Sleep 4s
 
-# Browse — seen stories are dimmed automatically
+# Browse top stories — pick story 2
 Type "j"
-Sleep 400ms
+Sleep 500ms
 Type "j"
-Sleep 400ms
-Type "j"
-Sleep 400ms
+Sleep 600ms
 
-# Switch to Best feed — older stories with longer, richer articles
-Type "3"
-Sleep 3500ms
-
-# Navigate well down the list for meatier articles
-Type "j"
-Sleep 350ms
-Type "j"
-Sleep 350ms
-Type "j"
-Sleep 350ms
-Type "j"
-Sleep 350ms
-Type "j"
-Sleep 350ms
-Type "j"
-Sleep 350ms
-Type "j"
-Sleep 350ms
-Type "j"
-Sleep 400ms
-
-# Reader mode — structured rendering unique to hnr
+# Reader mode
 Type "r"
 Sleep 8s
 
-# Jump between article sections with n
-Type "n"
-Sleep 1400ms
+# Line scroll to show content moving
+Type "j"
+Sleep 300ms
+Type "j"
+Sleep 300ms
+Type "j"
+Sleep 300ms
+Type "j"
+Sleep 300ms
+Type "j"
+Sleep 300ms
+
+# Jump between sections
 Type "n"
 Sleep 1400ms
 Type "n"
 Sleep 1400ms
 
-# Page down through the article
+# Half-page down
 Type "d"
 Sleep 1000ms
 Type "d"
 Sleep 1000ms
 
-# Jump to end, back to top
+# Jump to end
 Type "G"
 Sleep 1200ms
+
+# Back to top
 Type "g"
 Sleep 1000ms
 
 # Close reader
 Escape
 Sleep 700ms
-
-# Back to Top feed
-Type "1"
-Sleep 3000ms
 
 # Fetch threaded comments
 Enter
