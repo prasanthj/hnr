@@ -569,6 +569,56 @@ fn draw_compose_overlay(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(p, popup);
 }
 
+fn blocks_to_lines(blocks: &[crate::reader::Block]) -> Vec<Line<'_>> {
+    use crate::reader::Block;
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    for block in blocks {
+        match block {
+            Block::Heading(level, text) => {
+                let prefix = if *level == 1 { "━━ " } else if *level == 2 { "── " } else { "· " };
+                let style = if *level <= 2 {
+                    Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(ORANGE)
+                };
+                lines.push(Line::from(Span::styled(format!("{prefix}{text}"), style)));
+                lines.push(Line::raw(""));
+            }
+            Block::Paragraph(text) => {
+                lines.push(Line::from(text.as_str()));
+                lines.push(Line::raw(""));
+            }
+            Block::Code(text) => {
+                for l in text.lines() {
+                    lines.push(Line::from(Span::styled(
+                        format!("  {l}"),
+                        Style::default().fg(Color::DarkGray),
+                    )));
+                }
+                lines.push(Line::raw(""));
+            }
+            Block::Quote(text) => {
+                for l in text.lines() {
+                    lines.push(Line::from(vec![
+                        Span::styled("│ ", Style::default().fg(ORANGE)),
+                        Span::styled(l, Style::default().fg(GRAY)),
+                    ]));
+                }
+                lines.push(Line::raw(""));
+            }
+            Block::ListItem(text) => {
+                lines.push(Line::from(vec![
+                    Span::styled("• ", Style::default().fg(ORANGE)),
+                    Span::from(text.as_str()),
+                ]));
+            }
+        }
+    }
+
+    lines
+}
+
 fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scroll: usize, area: Rect) {
     let popup = centered_rect(90, 90, area);
     f.render_widget(Clear, popup);
@@ -579,13 +629,14 @@ fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scrol
         .borders(Borders::ALL)
         .border_style(Style::default().fg(ORANGE))
         .title_bottom(Line::from(Span::styled(
-          " j/k scroll  ·  d/u page  ·  o browser  ·  Esc close ",
+            " g/G top/bot · j/k scroll · d/u page · n/N section · o browser · Esc close ",
             Style::default().fg(GRAY),
         )));
     let inner = block.inner(popup);
     f.render_widget(block, popup);
 
-    let p = Paragraph::new(content.text.as_str())
+    let lines = blocks_to_lines(&content.blocks);
+    let p = Paragraph::new(lines)
         .style(Style::default().fg(Color::White).bg(DARK))
         .wrap(Wrap { trim: true })
         .scroll((scroll as u16, 0));

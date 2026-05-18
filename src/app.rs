@@ -90,7 +90,7 @@ pub enum Mode {
 
 pub struct ReaderContent {
     pub title: String,
-    pub text: String,
+    pub blocks: Vec<crate::reader::Block>,
 }
 
 #[derive(Clone)]
@@ -158,6 +158,8 @@ pub struct App {
 
     pub reader_content: Option<ReaderContent>,
     pub reader_scroll: usize,
+    pub reader_section_offsets: Vec<usize>,
+    pub reader_total_lines: usize,
 
     pub loading: bool,
     pub client: reqwest::Client,
@@ -205,6 +207,8 @@ impl App {
             search_base: "https://hn.algolia.com/api/v1".to_string(),
             reader_content: None,
             reader_scroll: 0,
+            reader_section_offsets: vec![],
+            reader_total_lines: 0,
             loading: false,
             client,
             api_base: HN_API_BASE.to_string(),
@@ -563,8 +567,12 @@ impl App {
         self.status_message = "Fetching article…".into();
         let client = self.client.clone();
         match crate::api::fetch_readable(&client, &url).await {
-            Ok((title, text)) => {
-                self.reader_content = Some(ReaderContent { title, text });
+            Ok((title, html)) => {
+                let (blocks, section_offsets) = crate::reader::parse_html(&html);
+                let total_lines = section_offsets.last().copied().unwrap_or(0) + 40;
+                self.reader_section_offsets = section_offsets;
+                self.reader_total_lines = total_lines;
+                self.reader_content = Some(ReaderContent { title, blocks });
                 self.reader_scroll = 0;
                 self.mode = Mode::Reader;
                 self.status_message = String::new();

@@ -1,6 +1,7 @@
 mod api;
 mod app;
 mod bookmarks;
+mod reader;
 mod seen;
 mod session;
 mod ui;
@@ -61,7 +62,11 @@ async fn main() -> anyhow::Result<()> {
                 Mode::Compose => handle_compose_keys(&mut app, key.code, key.modifiers).await,
                 Mode::Command => handle_command_keys(&mut app, key.code).await,
                 Mode::Search => handle_search_keys(&mut app, key.code).await,
-                Mode::Reader => handle_reader_keys(&mut app, key.code),
+                Mode::Reader => {
+                    let sz = terminal.size()?;
+                    let inner_h = (sz.height as usize * 90 / 100).saturating_sub(2);
+                    handle_reader_keys(&mut app, key.code, inner_h);
+                }
                 Mode::Normal => {
                     let h = terminal.size()?.height as usize;
                     handle_normal_keys(&mut app, key.code, key.modifiers, h).await;
@@ -286,12 +291,27 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
     }
 }
 
-fn handle_reader_keys(app: &mut App, code: KeyCode) {
+fn handle_reader_keys(app: &mut App, code: KeyCode, inner_h: usize) {
+    let half = (inner_h / 2).max(1);
     match code {
         KeyCode::Char('j') | KeyCode::Down => app.reader_scroll += 1,
         KeyCode::Char('k') | KeyCode::Up => app.reader_scroll = app.reader_scroll.saturating_sub(1),
-        KeyCode::Char('d') => app.reader_scroll += 20,
-        KeyCode::Char('u') => app.reader_scroll = app.reader_scroll.saturating_sub(20),
+        KeyCode::Char('d') => app.reader_scroll += half,
+        KeyCode::Char('u') => app.reader_scroll = app.reader_scroll.saturating_sub(half),
+        KeyCode::Char('g') => app.reader_scroll = 0,
+        KeyCode::Char('G') => {
+            app.reader_scroll = app.reader_total_lines.saturating_sub(inner_h);
+        }
+        KeyCode::Char('n') => {
+            if let Some(&next) = app.reader_section_offsets.iter().find(|&&o| o > app.reader_scroll) {
+                app.reader_scroll = next;
+            }
+        }
+        KeyCode::Char('N') => {
+            if let Some(&prev) = app.reader_section_offsets.iter().rev().find(|&&o| o < app.reader_scroll) {
+                app.reader_scroll = prev;
+            }
+        }
         KeyCode::Char('o') => { app.close_reader(); app.open_story_in_browser(); }
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('r') => app.close_reader(),
         _ => {}
