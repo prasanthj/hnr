@@ -6,7 +6,7 @@ Set Width 1600
 Set Height 900
 Set Theme "Catppuccin Mocha"
 Set Padding 24
-Set PlaybackSpeed 1
+Set PlaybackSpeed 2
 Set TypingSpeed 80ms
 
 Hide
@@ -23,15 +23,13 @@ Type "hnr"
 Enter
 Sleep 4s
 
-# Browse top stories — pick story 2
-Type "j"
-Sleep 500ms
-Type "j"
-Sleep 600ms
+# Switch to Best feed — longer, meatier articles
+Type "3"
+Sleep 4s
 
-# Reader mode
+# Story 1 on Best
 Type "r"
-Sleep 8s
+Sleep 12s
 
 # Line scroll to show content moving
 Type "j"
@@ -119,19 +117,20 @@ Sleep 400ms
 Enter
 Sleep 4s
 
-# Browse results
+# Browse results — pause so viewer reads them
 Type "j"
 Sleep 350ms
 Type "j"
 Sleep 350ms
+Sleep 2000ms
 
-# Bookmark this search result
+# Bookmark this search result — pause to show star appear
 Type "b"
-Sleep 700ms
+Sleep 2000ms
 
-# Show bookmark feed — the ratatui story is now saved
+# Show bookmark feed — pause to show the saved story
 Type "7"
-Sleep 1800ms
+Sleep 3000ms
 
 # Back to top feed
 Type "1"
