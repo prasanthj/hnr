@@ -8,7 +8,9 @@ Browse stories, read threaded comments, search, vote, reply, and bookmark — al
 
 - **Six feeds** — Top, New, Best, Ask HN, Show HN, Jobs
 - **Threaded comments** — recursive tree with inline expand/collapse per comment
-- **Reader mode** — press `r` to fetch and render any article as clean readable text (powered by Mozilla Readability)
+- **Comment prefetch** — comments are fetched automatically after a short dwell on any story and the pane switches without pressing Enter; works for Algolia search results too
+- **Reader mode** — press `r` to fetch and render any article as structured text with headings, code blocks, quotes and lists (powered by Mozilla Readability); loads in the background with a progress indicator
+- **Shimmer progress** — all async operations (feed refresh, article fetch, comment prefetch, search) show an animated shimmer indicator in the status bar
 - **Search** — Algolia-powered full-text search; press `?` to open, results drop into the story list
 - **Seen tracking** — stories dim automatically when you open their comments; press `u` to mark unread (persisted to `~/.hnr/seen.json`)
 - **Bookmarks** — save stories with `b`, browse them on feed `7`, persisted to `~/.hnr/bookmarks.json`
@@ -20,11 +22,7 @@ Browse stories, read threaded comments, search, vote, reply, and bookmark — al
 
 ## Demo
 
-![hnr demo](demo.gif)
-
-## Screenshot
-
-![hnr screenshot](screenshot.png)
+![hnr showcase](showcase.gif)
 
 ## Install
 
@@ -53,7 +51,7 @@ hnr
 | `Tab` | Switch between story list and comments pane |
 | `Esc` | Back to story pane · Close modal |
 | `Space` | Collapse / expand comment thread |
-| `r` | Reader mode — fetch and render article as clean text |
+| `r` | Reader mode — fetch and render article as structured text |
 | `R` | Refresh current feed |
 | `b` | Bookmark / unbookmark selected story |
 | `u` | Mark selected story as unread |
@@ -68,6 +66,17 @@ hnr
 | `h` | Show help |
 | `/` | Command mode |
 | `q` | Quit |
+
+### Reader mode keys
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Scroll line by line |
+| `d` / `u` | Half-page down / up |
+| `n` / `N` | Jump to next / previous section |
+| `g` / `G` | Jump to top / bottom |
+| `o` | Open article in browser |
+| `Esc` / `q` / `r` | Close reader |
 
 ## Slash Commands
 
