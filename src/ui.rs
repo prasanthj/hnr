@@ -644,22 +644,48 @@ fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scrol
 }
 
 fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
-    let p = match app.mode {
-        Mode::Command => Paragraph::new(format!(":{}", app.command_input))
-            .style(Style::default().fg(Color::White).bg(DARK)),
-        Mode::Search => Paragraph::new(format!("?{}", app.search_input))
-            .style(Style::default().fg(Color::White).bg(DARK)),
-        _ => {
-            let style = if app.loading {
-                Style::default().fg(ORANGE)
-            } else {
-                Style::default().fg(GRAY)
-            };
-            Paragraph::new(Line::from(Span::styled(&app.status_message, style)))
-                .style(Style::default().bg(DARK))
+    match app.mode {
+        Mode::Command => {
+            let p = Paragraph::new(format!(":{}", app.command_input))
+                .style(Style::default().fg(Color::White).bg(DARK));
+            f.render_widget(p, area);
         }
-    };
-    f.render_widget(p, area);
+        Mode::Search => {
+            let p = Paragraph::new(format!("?{}", app.search_input))
+                .style(Style::default().fg(Color::White).bg(DARK));
+            f.render_widget(p, area);
+        }
+        _ => {
+            let msg_style = if app.loading { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
+            if let Some(progress) = &app.progress {
+                let spans = progress.spans();
+                let progress_width = spans.len() as u16 + 2;
+                if area.width > progress_width {
+                    let chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Min(0), Constraint::Length(progress_width)])
+                        .split(area);
+                    let mut progress_line = vec![Span::raw(" ")];
+                    progress_line.extend(spans);
+                    f.render_widget(
+                        Paragraph::new(Line::from(Span::styled(&app.status_message, msg_style)))
+                            .style(Style::default().bg(DARK)),
+                        chunks[0],
+                    );
+                    f.render_widget(
+                        Paragraph::new(Line::from(progress_line)).style(Style::default().bg(DARK)),
+                        chunks[1],
+                    );
+                    return;
+                }
+            }
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(&app.status_message, msg_style)))
+                    .style(Style::default().bg(DARK)),
+                area,
+            );
+        }
+    }
 }
 
 

@@ -4,6 +4,8 @@ use arboard::Clipboard;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use crate::shimmer::Progress;
 
 const HN_API_BASE: &str = "https://hacker-news.firebaseio.com/v0";
 
@@ -160,6 +162,12 @@ pub struct App {
     pub reader_scroll: usize,
     pub reader_section_offsets: Vec<usize>,
     pub reader_total_lines: usize,
+    pub pending_reader: Arc<Mutex<Option<Result<(String, Vec<crate::reader::Block>, Vec<usize>, usize), String>>>>,
+
+    pub story_dwell_start: Option<Instant>,
+    pub prefetching_story_id: Option<u64>,
+    pub pending_comments: Arc<Mutex<Option<(u64, Vec<CommentNode>)>>>,
+    pub progress: Option<Progress>,
 
     pub loading: bool,
     pub client: reqwest::Client,
@@ -209,6 +217,11 @@ impl App {
             reader_scroll: 0,
             reader_section_offsets: vec![],
             reader_total_lines: 0,
+            pending_reader: Arc::new(Mutex::new(None)),
+            story_dwell_start: Some(Instant::now()),
+            prefetching_story_id: None,
+            pending_comments: Arc::new(Mutex::new(None)),
+            progress: None,
             loading: false,
             client,
             api_base: HN_API_BASE.to_string(),
@@ -232,6 +245,9 @@ impl App {
             if self.story_cursor >= self.story_scroll + visible {
                 self.story_scroll += 1;
             }
+            self.story_dwell_start = Some(Instant::now());
+            self.prefetching_story_id = None;
+            self.progress = None;
         }
     }
 
@@ -241,6 +257,9 @@ impl App {
             if self.story_cursor < self.story_scroll {
                 self.story_scroll = self.story_cursor;
             }
+            self.story_dwell_start = Some(Instant::now());
+            self.prefetching_story_id = None;
+            self.progress = None;
         }
     }
 
@@ -474,6 +493,7 @@ impl App {
             return;
         }
         self.loading = true;
+        self.progress = Some(Progress::new("Refreshing"));
         self.status_message = format!("Loading {} stories...", self.feed.label());
         let client = self.client.clone();
         let base = self.api_base.clone();
@@ -515,6 +535,7 @@ impl App {
             Err(e) => self.status_message = format!("Error: {e}"),
         }
         self.loading = false;
+        self.progress = None;
     }
 
     pub fn mark_unseen(&mut self) {
@@ -535,6 +556,17 @@ impl App {
                 crate::seen::save(&self.seen_path, &self.seen_ids);
             }
             self.expanded_comment = None;
+            // Use prefetched comments if available
+            if self.comments_story_id == Some(story_id) && !self.comments.is_empty() {
+                let (cursor, scroll) = self.comment_pos_cache.get(&story_id).copied().unwrap_or((0, 0));
+                self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
+                self.comment_scroll = scroll;
+                self.status_message = format!(
+                    "{} top-level threads | j/k | Space collapse | v vote | c reply | Tab back",
+                    self.comments.len()
+                );
+                return;
+            }
             self.comments = vec![];
             self.comments_story_id = Some(story_id);
             let kids = story.kids.clone().unwrap_or_default();
@@ -553,37 +585,140 @@ impl App {
             self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
             self.comment_scroll = scroll;
             self.status_message = format!(
-                "{} top-level threads | j/k | Space collapse | u profile | v vote | c reply | Tab back",
+                "{} top-level threads | j/k | Space collapse | v vote | c reply | Tab back",
                 self.comments.len()
             );
         }
     }
 
-    pub async fn load_reader(&mut self) {
+    pub fn load_reader(&mut self) {
         let url = match self.selected_story().and_then(|s| s.url.clone()) {
             Some(u) => u,
             None => { self.status_message = "No URL for this story.".into(); return; }
         };
-        self.status_message = "Fetching article…".into();
+        self.progress = Some(Progress::new("Fetching article"));
         let client = self.client.clone();
-        match crate::api::fetch_readable(&client, &url).await {
-            Ok((title, html)) => {
-                let (blocks, section_offsets) = crate::reader::parse_html(&html);
-                let total_lines = section_offsets.last().copied().unwrap_or(0) + 40;
-                self.reader_section_offsets = section_offsets;
-                self.reader_total_lines = total_lines;
-                self.reader_content = Some(ReaderContent { title, blocks });
-                self.reader_scroll = 0;
-                self.mode = Mode::Reader;
-                self.status_message = String::new();
+        let pending = self.pending_reader.clone();
+        tokio::spawn(async move {
+            let result = crate::api::fetch_readable(&client, &url).await
+                .map(|(title, html)| {
+                    let (blocks, offsets) = crate::reader::parse_html(&html);
+                    let total = offsets.last().copied().unwrap_or(0) + 40;
+                    (title, blocks, offsets, total)
+                })
+                .map_err(|e| e.to_string());
+            if let Ok(mut lock) = pending.lock() {
+                *lock = Some(result);
             }
-            Err(e) => self.status_message = format!("Reader: {e}"),
+        });
+    }
+
+    pub fn apply_pending_reader(&mut self) {
+        let ready = {
+            let mut lock = match self.pending_reader.lock() {
+                Ok(l) => l,
+                Err(_) => return,
+            };
+            lock.take()
+        };
+        if let Some(result) = ready {
+            match result {
+                Ok((title, blocks, section_offsets, total_lines)) => {
+                    self.reader_section_offsets = section_offsets;
+                    self.reader_total_lines = total_lines;
+                    self.reader_content = Some(ReaderContent { title, blocks });
+                    self.reader_scroll = 0;
+                    self.mode = Mode::Reader;
+                    self.progress = None;
+                    self.story_dwell_start = Some(Instant::now() - std::time::Duration::from_secs(3));
+                    self.prefetching_story_id = None;
+                }
+                Err(e) => {
+                    self.status_message = format!("Reader: {e}");
+                    self.progress = None;
+                }
+            }
         }
     }
 
     pub fn close_reader(&mut self) {
         self.reader_content = None;
         self.mode = Mode::Normal;
+    }
+
+    pub fn maybe_start_prefetch(&mut self) {
+        let story = match self.selected_story() {
+            Some(s) if s.kids.as_ref().map_or(0, |k| k.len()) > 0 => s.clone(),
+            _ => return,
+        };
+        let story_id = story.id;
+        if self.prefetching_story_id == Some(story_id) {
+            return;
+        }
+        if self.comments_story_id == Some(story_id) && !self.comments.is_empty() {
+            return;
+        }
+        let elapsed = match self.story_dwell_start {
+            Some(t) => t.elapsed().as_secs(),
+            None => return,
+        };
+        if elapsed < 3 {
+            return;
+        }
+        self.prefetching_story_id = Some(story_id);
+        self.progress = Some(Progress::new("Fetching comments"));
+        let client = self.client.clone();
+        let base = self.api_base.clone();
+        let pending = self.pending_comments.clone();
+        let kids = story.kids.clone().unwrap_or_default();
+        tokio::spawn(async move {
+            let nodes = load_comment_tree(&client, &kids, 0, &base).await;
+            if let Ok(mut lock) = pending.lock() {
+                *lock = Some((story_id, nodes));
+            }
+        });
+    }
+
+    pub fn apply_pending_comments(&mut self) {
+        let ready = {
+            let mut lock = match self.pending_comments.lock() {
+                Ok(l) => l,
+                Err(_) => return,
+            };
+            lock.take()
+        };
+        if let Some((story_id, nodes)) = ready {
+            let current_id = self.selected_story().map(|s| s.id);
+            if current_id == Some(story_id) && self.comments_story_id != Some(story_id) {
+                self.comments_story_id = Some(story_id);
+                self.comments = nodes;
+                self.comments_loading = false;
+                self.progress = None;
+                if self.mode == Mode::Normal && self.active_pane == Pane::Stories {
+                    let (cursor, scroll) = self.comment_pos_cache.get(&story_id).copied().unwrap_or((0, 0));
+                    self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
+                    self.comment_scroll = scroll;
+                    self.active_pane = Pane::Comments;
+                    self.status_message = format!(
+                        "{} top-level threads | j/k | Space collapse | v vote | c reply | Tab back",
+                        self.comments.len()
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn tick_progress(&mut self) {
+        let story_id = self.selected_story().map(|s| s.id);
+        let has_kids = self.selected_story()
+            .map_or(false, |s| s.kids.as_ref().map_or(0, |k| k.len()) > 0);
+        let comments_ready = self.comments_story_id == story_id && !self.comments.is_empty();
+
+        if !has_kids || comments_ready {
+            self.progress = None;
+        } else if self.progress.is_none() {
+            self.progress = Some(Progress::new("Fetching comments"));
+        }
     }
 
     pub fn start_search(&mut self) {
@@ -704,7 +839,7 @@ impl App {
         self.status_message = "j/k navigate | Enter open | Tab switch pane | / command".into();
     }
 
-    pub fn open_story_in_browser(&self) {
+    pub fn open_story_in_browser(&mut self) {
         if let Some(story) = self.selected_story() {
             let url = story
                 .url
@@ -712,6 +847,9 @@ impl App {
                 .unwrap_or_else(|| format!("https://news.ycombinator.com/item?id={}", story.id));
             let _ = open::that(url);
         }
+        self.story_dwell_start = Some(Instant::now() - std::time::Duration::from_secs(3));
+        self.prefetching_story_id = None;
+        self.progress = None;
     }
 
     pub fn open_hn_page_in_browser(&self) {

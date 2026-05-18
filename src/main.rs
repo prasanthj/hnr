@@ -4,6 +4,7 @@ mod bookmarks;
 mod reader;
 mod seen;
 mod session;
+mod shimmer;
 mod ui;
 
 use app::{App, Feed, LoginField, Mode, Pane, ViewMode};
@@ -51,6 +52,10 @@ async fn main() -> anyhow::Result<()> {
 
     loop {
         terminal.draw(|f| ui::draw(f, &app))?;
+        app.apply_pending_reader();
+        app.apply_pending_comments();
+        app.maybe_start_prefetch();
+        app.tick_progress();
 
         if !event::poll(Duration::from_millis(100))? {
             continue;
@@ -261,7 +266,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
             KeyCode::Char('y') => app.copy_url_to_clipboard(),
-            KeyCode::Char('r') => app.load_reader().await,
+            KeyCode::Char('r') => app.load_reader(),
             _ => {}
         },
         Pane::Comments => match code {
@@ -285,7 +290,7 @@ async fn handle_normal_keys(app: &mut App, code: KeyCode, mods: KeyModifiers, he
             KeyCode::Char('o') => app.open_story_in_browser(),
             KeyCode::Char('O') => app.open_hn_page_in_browser(),
             KeyCode::Char('y') => app.copy_url_to_clipboard(),
-            KeyCode::Char('r') => app.load_reader().await,
+            KeyCode::Char('r') => app.load_reader(),
             _ => {}
         },
     }
