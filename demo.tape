@@ -28,47 +28,51 @@ Sleep 400ms
 Type "j"
 Sleep 400ms
 
-# Switch to Best feed for richer article content
+# Switch to Best feed — older stories with longer, richer articles
 Type "3"
 Sleep 3500ms
 
-# Navigate to a story further down
+# Navigate well down the list for meatier articles
+Type "j"
+Sleep 350ms
+Type "j"
+Sleep 350ms
+Type "j"
+Sleep 350ms
+Type "j"
+Sleep 350ms
+Type "j"
+Sleep 350ms
+Type "j"
+Sleep 350ms
+Type "j"
+Sleep 350ms
 Type "j"
 Sleep 400ms
-Type "j"
-Sleep 400ms
-Type "j"
-Sleep 400ms
-Type "j"
-Sleep 400ms
-Type "j"
-Sleep 500ms
 
 # Reader mode — structured rendering unique to hnr
 Type "r"
-Sleep 6s
+Sleep 8s
 
 # Jump between article sections with n
 Type "n"
-Sleep 1300ms
+Sleep 1400ms
 Type "n"
-Sleep 1300ms
+Sleep 1400ms
 Type "n"
-Sleep 1300ms
+Sleep 1400ms
 
 # Page down through the article
 Type "d"
-Sleep 900ms
+Sleep 1000ms
 Type "d"
-Sleep 900ms
-
-# Jump to end
-Type "G"
 Sleep 1000ms
 
-# Back to top
+# Jump to end, back to top
+Type "G"
+Sleep 1200ms
 Type "g"
-Sleep 800ms
+Sleep 1000ms
 
 # Close reader
 Escape
@@ -120,16 +124,10 @@ Sleep 1500ms
 Type "1"
 Sleep 900ms
 
-# Login modal — shows hnr supports voting and replies
-Type "l"
-Sleep 1800ms
-Escape
-Sleep 500ms
-
 # Full-text search via Algolia
 Type "?"
 Sleep 500ms
-Type "rust async"
+Type "ratatui"
 Sleep 400ms
 Enter
 Sleep 4s
@@ -139,8 +137,24 @@ Type "j"
 Sleep 350ms
 Type "j"
 Sleep 350ms
-Type "j"
-Sleep 350ms
+
+# Bookmark this search result
+Type "b"
+Sleep 700ms
+
+# Show bookmark feed — the ratatui story is now saved
+Type "7"
+Sleep 1800ms
+
+# Back to top feed
+Type "1"
+Sleep 900ms
+
+# Login modal — shows hnr supports voting and replies
+Type "l"
+Sleep 1800ms
+Escape
+Sleep 500ms
 
 # Quit
 Type "q"
