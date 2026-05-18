@@ -53,7 +53,11 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     ];
     let current = app.feed.label();
     let mut spans = vec![
-        Span::styled(" hnr ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
+        Span::styled(" h", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
+        Span::styled(".", Style::default().fg(GRAY)),
+        Span::styled("n", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
+        Span::styled(".", Style::default().fg(GRAY)),
+        Span::styled("r ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
         Span::raw("│ "),
     ];
     for (num, label) in &feeds {

@@ -2,7 +2,7 @@
 name = "hnr"
 version = "0.4.0"
 edition = "2021"
-description = "A fast terminal UI for Hacker News — browse feeds, read threaded comments, vote and reply"
+description = "h.n.r (HoNoR) — a fast terminal UI for Hacker News"
 license = "MIT"
 repository = "https://github.com/prasanthj/hnr"
 homepage = "https://github.com/prasanthj/hnr"

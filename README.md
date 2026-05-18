@@ -1,6 +1,8 @@
-# hnr
+# h.n.r
 
-### A terminal UI for Hacker News
+[![Crates.io](https://img.shields.io/crates/v/hnr.svg)](https://crates.io/crates/hnr)
+
+### A terminal UI for Hacker News — pronounced **HoNoR**
 
 Browse stories, read threaded comments, search, vote, reply, and bookmark — all without leaving the terminal. Built with Rust and [ratatui](https://ratatui.rs). Mostly vibe coded with Claude Code over a weekend.
 
