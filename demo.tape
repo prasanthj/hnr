@@ -22,11 +22,27 @@ Sleep 4s
 
 # Browse — seen stories are dimmed automatically
 Type "j"
-Sleep 500ms
+Sleep 400ms
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
+
+# Switch to Best feed for richer article content
+Type "3"
+Sleep 3500ms
+
+# Navigate to a story further down
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
 Type "j"
 Sleep 500ms
-Type "j"
-Sleep 600ms
 
 # Reader mode — structured rendering unique to hnr
 Type "r"
@@ -34,17 +50,33 @@ Sleep 6s
 
 # Jump between article sections with n
 Type "n"
-Sleep 1200ms
+Sleep 1300ms
 Type "n"
-Sleep 1200ms
+Sleep 1300ms
+Type "n"
+Sleep 1300ms
 
-# Page down
+# Page down through the article
 Type "d"
 Sleep 900ms
+Type "d"
+Sleep 900ms
+
+# Jump to end
+Type "G"
+Sleep 1000ms
+
+# Back to top
+Type "g"
+Sleep 800ms
 
 # Close reader
 Escape
 Sleep 700ms
+
+# Back to Top feed
+Type "1"
+Sleep 3000ms
 
 # Fetch threaded comments
 Enter
