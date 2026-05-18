@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let version_client = app.client.clone();
     tokio::spawn(async move {
         if let Ok(latest) = crate::api::fetch_latest_version(&version_client).await {
-            if latest != env!("CARGO_PKG_VERSION") {
+            if semver_gt(&latest, env!("CARGO_PKG_VERSION")) {
                 if let Ok(mut flag) = update_flag.lock() {
                     *flag = Some(latest);
                 }
@@ -323,6 +323,28 @@ fn handle_reader_keys(app: &mut App, code: KeyCode, inner_h: usize) {
     }
 }
 
+
+fn parse_ver(v: &str) -> (u64, u64, u64) {
+    let mut parts = v.splitn(3, '.').map(|p| p.parse::<u64>().unwrap_or(0));
+    (parts.next().unwrap_or(0), parts.next().unwrap_or(0), parts.next().unwrap_or(0))
+}
+
+fn semver_gt(a: &str, b: &str) -> bool {
+    parse_ver(a) > parse_ver(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn semver_gt_handles_double_digit_patch() {
+        assert!(semver_gt("0.3.10", "0.3.9"));
+        assert!(semver_gt("0.3.10", "0.3.8"));
+        assert!(!semver_gt("0.3.8", "0.3.10"));
+        assert!(!semver_gt("0.3.10", "0.3.10"));
+        assert!(semver_gt("1.0.0", "0.9.99"));
+    }
+}
 
 async fn switch_feed(app: &mut App, feed: Feed) {
     if app.feed != feed || app.search_query.is_some() {
