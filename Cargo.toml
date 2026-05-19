@@ -1,6 +1,6 @@
 [package]
 name = "hnr"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 description = "h.n.r (HoNoR) — a fast terminal UI for Hacker News"
 license = "MIT"

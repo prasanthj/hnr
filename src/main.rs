@@ -5,6 +5,7 @@ mod reader;
 mod seen;
 mod session;
 mod shimmer;
+mod theme;
 mod ui;
 
 use app::{App, Feed, LoginField, Mode, Pane, ViewMode};

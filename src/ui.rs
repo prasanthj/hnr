@@ -1,33 +1,43 @@
-use crate::app::{App, LoginField, Mode, Pane, ViewMode};
+use crate::app::{App, Feed, LoginField, Mode, Pane, ViewMode};
+use crate::theme::Theme;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{
+        Block, BorderType, Borders, Clear, List, ListItem, ListState,
+        Padding, Paragraph, Wrap,
+    },
     Frame,
 };
 
-const ORANGE: Color = Color::Rgb(255, 102, 0);
-const GRAY: Color = Color::Rgb(150, 150, 150);
-const DARK: Color = Color::Rgb(30, 30, 30);
-const SELECTED_BG: Color = Color::Rgb(50, 40, 30);
-
 pub fn draw(f: &mut Frame, app: &App) {
+    f.render_widget(
+        Block::default().style(Style::default().bg(Theme::BG)),
+        f.area(),
+    );
+
     let area = f.area();
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // header
-            Constraint::Min(0),    // body
-            Constraint::Length(1), // hints
-            Constraint::Length(1), // status / command
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
         ])
         .split(area);
 
     draw_header(f, app, root[0]);
-    draw_body(f, app, root[1]);
-    draw_hints(f, app, root[2]);
-    draw_statusbar(f, app, root[3]);
+    draw_separator(f, root[1], false);
+    draw_body(f, app, root[2]);
+    draw_separator(f, root[3], false);
+    draw_hints(f, app, root[4]);
+    draw_separator(f, root[5], true);
+    draw_statusbar(f, app, root[6]);
 
     match app.mode {
         Mode::Login => draw_login_overlay(f, app, area),
@@ -41,50 +51,87 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
 }
 
+fn overlay_block(title: &str) -> Block<'static> {
+    Block::default()
+        .title(Span::styled(format!(" {} ", title), Theme::secondary()))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Theme::accent())
+        .padding(Padding::horizontal(1))
+}
+
+fn draw_separator(f: &mut Frame, area: Rect, dotted: bool) {
+    let line = if dotted {
+        "· ".repeat(area.width as usize / 2 + 1)
+            .chars()
+            .take(area.width as usize)
+            .collect::<String>()
+    } else {
+        "─".repeat(area.width as usize)
+    };
+    f.render_widget(
+        Paragraph::new(line).style(Style::default().fg(Theme::DIM).bg(Theme::BG)),
+        area,
+    );
+}
+
+fn brand_spans() -> Vec<Span<'static>> {
+    let cap = Theme::accent().add_modifier(Modifier::BOLD);
+    let dot = Theme::secondary().add_modifier(Modifier::BOLD);
+    vec![
+        Span::raw(" "),
+        Span::styled("H", cap),
+        Span::styled("·", dot),
+        Span::styled("N", cap),
+        Span::styled("·", dot),
+        Span::styled("R", cap),
+        Span::raw("   "),
+    ]
+}
+
+fn mode_span(num: u8, label: &str, active: bool) -> Vec<Span<'static>> {
+    let label_upper = label.to_uppercase();
+    if active {
+        vec![
+            Span::styled(
+                format!(" {} ", label_upper),
+                Style::default().fg(Theme::BG).bg(Theme::ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+        ]
+    } else {
+        vec![
+            Span::styled(num.to_string(), Theme::dim()),
+            Span::raw(" "),
+            Span::styled(label_upper, Theme::secondary().add_modifier(Modifier::BOLD)),
+            Span::raw("   "),
+        ]
+    }
+}
+
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
-    let feeds = [
-        ("1", "Top"),
-        ("2", "New"),
-        ("3", "Best"),
-        ("4", "Ask"),
-        ("5", "Show"),
-        ("6", "Jobs"),
-        ("7", "Bookmarks"),
+    let feeds: &[(u8, &str)] = &[
+        (1, "Top"),
+        (2, "New"),
+        (3, "Best"),
+        (4, "Ask"),
+        (5, "Show"),
+        (6, "Jobs"),
+        (7, "Bookmarks"),
     ];
     let current = app.feed.label();
-    let mut spans = vec![
-        Span::styled(" h", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
-        Span::styled(".", Style::default().fg(GRAY)),
-        Span::styled("n", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
-        Span::styled(".", Style::default().fg(GRAY)),
-        Span::styled("r ", Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)),
-        Span::raw("│ "),
-    ];
-    for (num, label) in &feeds {
-        let is_current = current.starts_with(label);
-        if is_current {
-            spans.push(Span::styled(
-                format!("{num}:{label}"),
-                Style::default().fg(Color::Black).bg(ORANGE).add_modifier(Modifier::BOLD),
-            ));
-        } else {
-            spans.push(Span::styled(
-                num.to_string(),
-                Style::default().fg(ORANGE),
-            ));
-            spans.push(Span::styled(
-                format!(":{label}"),
-                Style::default().fg(GRAY),
-            ));
-        }
-        spans.push(Span::raw("  "));
+
+    let mut spans: Vec<Span<'static>> = brand_spans();
+
+    for (num, label) in feeds {
+        let active = current.starts_with(label);
+        spans.extend(mode_span(*num, label, active));
     }
 
     if let Some(session) = &app.session {
-        spans.push(Span::raw("│ "));
         spans.push(Span::styled(
             format!(" {} ", session.username),
-            Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD),
+            Style::default().fg(Theme::BG).bg(Theme::ACCENT_SOFT),
         ));
     }
 
@@ -93,68 +140,67 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         Some(ref v) => format!(" v{} ↑{} ", env!("CARGO_PKG_VERSION"), v),
         None => format!(" v{} ", env!("CARGO_PKG_VERSION")),
     };
-    let version_style = if update.is_some() {
-        Style::default().fg(Color::Yellow)
-    } else {
-        Style::default().fg(GRAY)
-    };
+    let version_style = if update.is_some() { Theme::accent() } else { Theme::dim() };
+
+    // One blank row above, content on second row.
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1)])
+        .split(area);
+    let mid = rows[1];
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(version_str.len() as u16)])
-        .split(area);
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(version_str.len() as u16),
+        ])
+        .split(mid);
 
-    let p = Paragraph::new(Line::from(spans)).style(Style::default().bg(DARK));
-    f.render_widget(p, cols[0]);
+    f.render_widget(
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(Theme::BG)),
+        cols[0],
+    );
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(version_str, version_style)))
+            .style(Style::default().bg(Theme::BG)),
+        cols[1],
+    );
+}
 
-    let ver = Paragraph::new(Line::from(Span::styled(version_str, version_style)))
-        .style(Style::default().bg(DARK));
-    f.render_widget(ver, cols[1]);
+fn hint_spans(pairs: &[(&str, &str)]) -> Vec<Span<'static>> {
+    let mut spans: Vec<Span<'static>> = vec![Span::raw(" ")];
+    for (i, (key, desc)) in pairs.iter().enumerate() {
+        spans.push(Span::styled(
+            key.to_string(),
+            Theme::accent().add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(desc.to_string(), Theme::secondary()));
+        if i < pairs.len() - 1 {
+            spans.push(Span::raw("  "));
+        }
+    }
+    spans
 }
 
 fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
     let spans = match app.mode {
-        Mode::Login => vec![
-            Span::styled(" Tab", Style::default().fg(ORANGE)),
-            Span::styled(" field  ", Style::default().fg(GRAY)),
-            Span::styled("Enter", Style::default().fg(ORANGE)),
-            Span::styled(" submit  ", Style::default().fg(GRAY)),
-            Span::styled("Esc", Style::default().fg(ORANGE)),
-            Span::styled(" cancel", Style::default().fg(GRAY)),
-        ],
-        Mode::Compose => vec![
-            Span::styled(" Ctrl+S", Style::default().fg(ORANGE)),
-            Span::styled(" post  ", Style::default().fg(GRAY)),
-            Span::styled("Esc", Style::default().fg(ORANGE)),
-            Span::styled(" cancel", Style::default().fg(GRAY)),
-        ],
-        Mode::Command => vec![
-            Span::styled(" Enter", Style::default().fg(ORANGE)),
-            Span::styled(" run  ", Style::default().fg(GRAY)),
-            Span::styled("Esc", Style::default().fg(ORANGE)),
-            Span::styled(" cancel", Style::default().fg(GRAY)),
-        ],
-        Mode::Search => vec![
-            Span::styled(" Type", Style::default().fg(ORANGE)),
-            Span::styled(" to search  ", Style::default().fg(GRAY)),
-            Span::styled("Enter", Style::default().fg(ORANGE)),
-            Span::styled(" run  ", Style::default().fg(GRAY)),
-            Span::styled("Esc", Style::default().fg(ORANGE)),
-            Span::styled(" cancel", Style::default().fg(GRAY)),
-        ],
-        Mode::Reader => vec![
-            Span::styled(" j/k/↑↓", Style::default().fg(ORANGE)),
-            Span::styled(" scroll  ", Style::default().fg(GRAY)),
-            Span::styled("d/u", Style::default().fg(ORANGE)),
-            Span::styled(" page  ", Style::default().fg(GRAY)),
-            Span::styled("o", Style::default().fg(ORANGE)),
-            Span::styled(" browser  ", Style::default().fg(GRAY)),
-            Span::styled("Esc", Style::default().fg(ORANGE)),
-            Span::styled(" close", Style::default().fg(GRAY)),
-        ],
+        Mode::Login => hint_spans(&[("Tab", "field"), ("Enter", "submit"), ("Esc", "cancel")]),
+        Mode::Compose => hint_spans(&[("Ctrl+S", "post"), ("Esc", "cancel")]),
+        Mode::Command => hint_spans(&[("Enter", "run"), ("Esc", "cancel")]),
+        Mode::Search => {
+            hint_spans(&[("Type", "to search"), ("Enter", "run"), ("Esc", "cancel")])
+        }
+        Mode::Reader => hint_spans(&[
+            ("j/k/↑↓", "scroll"),
+            ("d/u", "page"),
+            ("n/N", "section"),
+            ("o", "browser"),
+            ("Esc", "close"),
+        ]),
         Mode::Normal => {
             let login_hint = if app.session.is_some() { "logout" } else { "login" };
-            // global + pane-specific, every shortcut unique
             let global: &[(&str, &str)] = &[
                 ("h", "help"),
                 ("R", "refresh"),
@@ -189,27 +235,17 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
                     ("p", "profile"),
                 ],
             };
-            let sep = Span::styled("  ", Style::default().fg(GRAY));
-            let divider = Span::styled(" │ ", Style::default().fg(Color::Rgb(60, 60, 60)));
-            let mut s = vec![Span::raw(" ")];
-            for (i, (key, desc)) in global.iter().enumerate() {
-                s.push(Span::styled(key.to_string(), Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)));
-                s.push(Span::styled(format!(" {desc}"), Style::default().fg(GRAY)));
-                if i < global.len() - 1 { s.push(sep.clone()); }
-            }
-            s.push(divider);
-            for (i, (key, desc)) in pane.iter().enumerate() {
-                s.push(Span::styled(key.to_string(), Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)));
-                s.push(Span::styled(format!(" {desc}"), Style::default().fg(GRAY)));
-                if i < pane.len() - 1 { s.push(sep.clone()); }
-            }
+            let mut s = hint_spans(global);
+            s.push(Span::styled("  ·  ", Theme::dim()));
+            s.extend(hint_spans(pane));
             s
         }
     };
 
-    let p = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(Color::Rgb(20, 20, 20)));
-    f.render_widget(p, area);
+    f.render_widget(
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(Theme::BG)),
+        area,
+    );
 }
 
 fn draw_body(f: &mut Frame, app: &App, area: Rect) {
@@ -223,8 +259,37 @@ fn draw_body(f: &mut Frame, app: &App, area: Rect) {
 
 fn draw_story_list(f: &mut Frame, app: &App, area: Rect) {
     let focused = app.active_pane == Pane::Stories;
-    let border_style = if focused { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
-    let visible = (area.height as usize).saturating_sub(2);
+
+    // Right border acts as the pane separator.
+    let outer = Block::default()
+        .borders(Borders::RIGHT)
+        .border_style(Theme::dim());
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    let split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(0)])
+        .split(inner);
+
+    // Section label.
+    let label = if let Some(q) = &app.search_query {
+        format!("Search: {}", q)
+    } else {
+        match app.feed {
+            Feed::Bookmarks => "bookmarks".to_string(),
+            Feed::Jobs => "jobs".to_string(),
+            _ => format!("{} stories", app.feed.label().to_lowercase()),
+        }
+    };
+    f.render_widget(
+        Paragraph::new(Span::styled(label, Theme::dim()))
+            .style(Style::default().bg(Theme::BG)),
+        split[0],
+    );
+
+    let list_area = split[2];
+    let visible = list_area.height as usize;
 
     let items: Vec<ListItem> = app
         .stories
@@ -234,33 +299,65 @@ fn draw_story_list(f: &mut Frame, app: &App, area: Rect) {
         .take(visible)
         .map(|(i, story)| {
             let selected = i == app.story_cursor;
-            let rank = format!("{:>3}. ", i + 1);
-            let ago = story.time_ago();
-            let meta = format!(" ▲{} {} | {} comments{}", story.score(), story.display_by(), story.comment_count(), if ago.is_empty() { String::new() } else { format!(" | {ago}") });
-
             let seen = app.seen_ids.contains(&story.id);
-            let title_style = if selected {
-                Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)
-            } else if seen {
-                Style::default().fg(GRAY)
-            } else {
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
-            };
-            let rank_style = if selected { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
-            let bg = if selected { SELECTED_BG } else { Color::Reset };
             let bookmarked = app.bookmark_ids.contains(&story.id);
 
-            let line1 = Line::from(vec![
-                Span::styled(rank, rank_style),
-                Span::styled(if bookmarked { "★ " } else { "" }, Style::default().fg(Color::Yellow)),
-                Span::styled(story.display_title(), title_style),
-            ]);
-            let line2 = Line::from(vec![
-                Span::raw("     "),
-                Span::styled(meta, Style::default().fg(GRAY)),
+            // The bar spans every line of the item for a continuous left rail.
+            let bar: Span<'static> = if selected {
+                Span::styled("▎ ", Theme::accent())
+            } else {
+                Span::raw("  ")
+            };
+
+            let title_style = if selected {
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            } else if seen {
+                Theme::secondary()
+            } else {
+                Theme::title()
+            };
+
+            let score_style = match story.score() {
+                0..=99 => Theme::secondary(),
+                100..=299 => Theme::accent_soft(),
+                _ => Theme::accent(),
+            };
+
+            let title_line = Line::from(vec![
+                bar.clone(),
+                Span::styled(format!("{:>2}. ", i + 1), Theme::secondary()),
+                Span::styled(
+                    if bookmarked { "★ " } else { "" }.to_string(),
+                    Theme::accent_soft(),
+                ),
+                Span::styled(story.display_title().to_string(), title_style),
             ]);
 
-            ListItem::new(ratatui::text::Text::from(vec![line1, line2])).style(Style::default().bg(bg))
+            let ago = story.time_ago();
+            let mut meta_spans: Vec<Span<'static>> = vec![
+                bar.clone(),
+                Span::raw("    "),
+                Span::styled("▲ ", Theme::dim()),
+                Span::styled(story.score().to_string(), score_style),
+                Span::styled(" · ", Theme::dim()),
+                Span::styled(story.display_by().to_string(), Theme::secondary()),
+                Span::styled(" · ", Theme::dim()),
+                Span::styled(
+                    format!("{} comments", story.comment_count()),
+                    Theme::secondary(),
+                ),
+            ];
+            if !ago.is_empty() {
+                meta_spans.push(Span::styled(" · ", Theme::dim()));
+                meta_spans.push(Span::styled(ago, Theme::secondary()));
+            }
+
+            ListItem::new(vec![
+                title_line,
+                Line::from(vec![bar.clone()]),
+                Line::from(meta_spans),
+                Line::from(vec![bar]),
+            ])
         })
         .collect();
 
@@ -269,18 +366,10 @@ fn draw_story_list(f: &mut Frame, app: &App, area: Rect) {
         state.select(Some(app.story_cursor.saturating_sub(app.story_scroll)));
     }
 
-    let title = if let Some(q) = &app.search_query {
-        format!(" Search: {q} ")
-    } else {
-        format!(" {} Stories ", app.feed.label())
-    };
-    let list = List::new(items).block(
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .border_style(border_style),
-    );
-    f.render_stateful_widget(list, area, &mut state);
+    let list = List::new(items)
+        .highlight_style(Style::default().bg(Theme::SELECT_BG));
+
+    f.render_stateful_widget(list, list_area, &mut state);
 }
 
 fn draw_detail_panel(f: &mut Frame, app: &App, area: Rect) {
@@ -295,69 +384,118 @@ fn draw_detail_panel(f: &mut Frame, app: &App, area: Rect) {
     if let Some(story) = app.selected_story() {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(6), Constraint::Min(0)])
+            .constraints([
+                Constraint::Length(1), // "story" label
+                Constraint::Length(1), // blank
+                Constraint::Length(5), // story panel
+                Constraint::Length(1), // blank
+                Constraint::Length(1), // "comments [hints]" label
+                Constraint::Length(1), // blank
+                Constraint::Min(0),    // comments
+            ])
             .split(area);
-        draw_story_header(f, story, chunks[0]);
-        draw_comments(f, app, chunks[1], focused);
+
+        f.render_widget(
+            Paragraph::new(Span::styled("story", Theme::dim()))
+                .style(Style::default().bg(Theme::BG)),
+            chunks[0],
+        );
+        draw_story_header(f, story, chunks[2]);
+        draw_comments_label(f, focused, chunks[4]);
+        draw_comments(f, app, chunks[6], focused);
     } else {
-        let p = Paragraph::new("Select a story to read comments.")
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(GRAY)))
-            .style(Style::default().fg(GRAY));
-        f.render_widget(p, area);
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                "Select a story to read comments.",
+                Theme::secondary(),
+            ))
+            .style(Style::default().bg(Theme::BG)),
+            area,
+        );
     }
+}
+
+fn draw_comments_label(f: &mut Frame, focused: bool, area: Rect) {
+    let mut spans: Vec<Span<'static>> = vec![Span::styled("comments", Theme::dim())];
+    if focused {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("space", Theme::accent_soft()));
+        spans.push(Span::styled(" collapse · ", Theme::secondary()));
+        spans.push(Span::styled("v", Theme::accent_soft()));
+        spans.push(Span::styled(" vote · ", Theme::secondary()));
+        spans.push(Span::styled("c", Theme::accent_soft()));
+        spans.push(Span::styled(" reply", Theme::secondary()));
+    }
+    f.render_widget(
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(Theme::BG)),
+        area,
+    );
 }
 
 fn draw_story_header(f: &mut Frame, story: &crate::api::Item, area: Rect) {
     let url = story.url.as_deref().unwrap_or("(self post)");
     let ago = story.time_ago();
-    let meta = format!("▲ {}  by {}  {}  | {} comments  | o: open  O: HN", story.score(), story.display_by(), ago, story.comment_count());
-    let text_body = story.text_plain();
 
-    let mut lines = vec![
-        Line::from(Span::styled(story.display_title(), Style::default().fg(ORANGE).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(url, Style::default().fg(Color::Blue).add_modifier(Modifier::UNDERLINED))),
-        Line::from(Span::styled(meta, Style::default().fg(GRAY))),
+    let lines = vec![
+        Line::from(Span::styled(
+            story.display_title().to_string(),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(url.to_string(), Theme::accent_soft())),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(format!("▲ {}", story.score()), Theme::secondary()),
+            Span::styled("  by ", Theme::dim()),
+            Span::styled(story.display_by().to_string(), Theme::accent()),
+            Span::styled("  ·  ", Theme::dim()),
+            Span::styled(ago, Theme::secondary()),
+            Span::styled("  ·  ", Theme::dim()),
+            Span::styled(
+                format!("{} comments", story.comment_count()),
+                Theme::secondary(),
+            ),
+        ]),
     ];
-    for l in text_body.lines().take(2) {
-        lines.push(Line::from(Span::styled(l.to_string(), Style::default().fg(Color::White))));
-    }
 
     let p = Paragraph::new(lines)
-        .block(Block::default().title(" Story ").borders(Borders::ALL).border_style(Style::default().fg(ORANGE)))
+        .block(
+            Block::default()
+                .borders(Borders::LEFT)
+                .border_style(Theme::accent())
+                .padding(Padding::horizontal(1)),
+        )
+        .style(Style::default().bg(Color::Rgb(0x22, 0x20, 0x1c)))
         .wrap(Wrap { trim: true });
     f.render_widget(p, area);
 }
 
-fn draw_comments(f: &mut Frame, app: &App, area: Rect, focused: bool) {
-    let border_style = if focused { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
+fn draw_comments(f: &mut Frame, app: &App, area: Rect, _focused: bool) {
+    let placeholder = |msg: &'static str| {
+        Paragraph::new(Span::styled(msg, Theme::secondary()))
+            .style(Style::default().bg(Theme::BG))
+    };
 
     if app.comments_loading {
-        let p = Paragraph::new("Loading comments…")
-            .block(Block::default().title(" Comments ").borders(Borders::ALL).border_style(border_style))
-            .style(Style::default().fg(GRAY));
-        f.render_widget(p, area);
+        f.render_widget(placeholder("Loading comments…"), area);
         return;
     }
 
     if app.comments_story_id.is_none() {
-        let p = Paragraph::new("Press Enter to load comments.")
-            .block(Block::default().title(" Comments ").borders(Borders::ALL).border_style(border_style))
-            .style(Style::default().fg(GRAY));
-        f.render_widget(p, area);
+        f.render_widget(placeholder("Press Enter to load comments."), area);
         return;
     }
 
     if app.comments.is_empty() {
-        let p = Paragraph::new("No comments yet.")
-            .block(Block::default().title(" Comments ").borders(Borders::ALL).border_style(border_style))
-            .style(Style::default().fg(GRAY));
-        f.render_widget(p, area);
+        f.render_widget(placeholder("No comments yet."), area);
         return;
     }
 
     let flat = app.flat_comments();
     let visible = (area.height as usize).saturating_sub(2);
-    let depth_colors = [Color::Cyan, Color::Green, Color::Yellow, Color::Magenta, Color::Red, Color::Blue, Color::White];
+
+    let story_author: Option<String> = app
+        .selected_story()
+        .and_then(|s| s.by.clone());
 
     let items: Vec<ListItem> = flat
         .iter()
@@ -366,104 +504,123 @@ fn draw_comments(f: &mut Frame, app: &App, area: Rect, focused: bool) {
         .take(visible)
         .map(|(i, (node, depth))| {
             let selected = i + app.comment_scroll == app.comment_cursor;
-            let indent = "  ".repeat(*depth);
-            let collapse = if node.collapsed && !node.children.is_empty() {
-                " [+]"
-            } else if !node.collapsed && !node.children.is_empty() {
-                " [-]"
-            } else {
-                ""
+            let bg = if selected { Theme::SELECT_BG } else { Theme::BG };
+
+            let glyph = if node.collapsed { "▸" } else { "▾" };
+            let is_op = story_author
+                .as_deref()
+                .map(|a| Some(a) == node.item.by.as_deref())
+                .unwrap_or(false);
+            let user_style = if is_op { Theme::accent() } else { Theme::accent_soft() };
+
+            let guides = || {
+                (0..*depth)
+                    .map(|_| Span::styled("│ ", Theme::dim()))
+                    .collect::<Vec<_>>()
             };
 
-            let dc = depth_colors[depth % depth_colors.len()];
-            let header = format!("{indent}▸ {}{collapse}", node.item.display_by());
-            let header_style = if selected {
-                Style::default().fg(dc).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(dc)
-            };
+            let mut header = guides();
+            header.push(Span::styled(glyph.to_string(), Theme::secondary()));
+            header.push(Span::raw(" "));
+            header.push(Span::styled(node.item.display_by().to_string(), user_style));
 
-            let text = &node.text;
-            let bg = if selected { SELECTED_BG } else { Color::Reset };
             let is_expanded = app.expanded_comment == Some(node.item.id);
+            let text = &node.text;
+            let mut item_lines = vec![Line::from(header)];
 
-            let mut item_lines = vec![Line::from(Span::styled(header, header_style))];
-            if is_expanded {
-                if text.trim().is_empty() {
-                    item_lines.push(Line::from(vec![
-                        Span::raw(format!("{indent}  ")),
-                        Span::styled("[no text]", Style::default().fg(GRAY)),
-                    ]));
-                } else {
-                    for line in text.lines() {
-                        item_lines.push(Line::from(vec![
-                            Span::raw(format!("{indent}  ")),
-                            Span::styled(line.to_string(), Style::default().fg(Color::White)),
-                        ]));
+            if !node.collapsed {
+                if is_expanded {
+                    if text.trim().is_empty() {
+                        let mut spans = guides();
+                        spans.push(Span::raw("  "));
+                        spans.push(Span::styled("[no text]", Theme::secondary()));
+                        item_lines.push(Line::from(spans));
+                    } else {
+                        for line in text.lines() {
+                            let mut spans = guides();
+                            spans.push(Span::raw("  "));
+                            spans.push(Span::styled(line.to_string(), Theme::primary()));
+                            item_lines.push(Line::from(spans));
+                        }
                     }
+                } else {
+                    let max_width = area.width as usize - depth * 2 - 4;
+                    let preview: String = text
+                        .lines()
+                        .next()
+                        .unwrap_or("")
+                        .chars()
+                        .take(max_width)
+                        .collect();
+                    let mut spans = guides();
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(preview, Theme::primary()));
+                    item_lines.push(Line::from(spans));
                 }
-            } else {
-                let preview: String = text
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .chars()
-                    .take(area.width as usize - depth * 2 - 4)
-                    .collect();
-                item_lines.push(Line::from(vec![
-                    Span::raw(format!("{indent}  ")),
-                    Span::styled(preview, Style::default().fg(Color::White)),
-                ]));
             }
 
-            ListItem::new(ratatui::text::Text::from(item_lines)).style(Style::default().bg(bg))
+            item_lines.push(Line::from(guides()));
+
+            ListItem::new(ratatui::text::Text::from(item_lines))
+                .style(Style::default().bg(bg))
         })
         .collect();
 
-    let title = if focused { " Comments (Space collapse · v vote · c reply) " } else { " Comments " };
-    f.render_widget(
-        List::new(items).block(Block::default().title(title).borders(Borders::ALL).border_style(border_style)),
-        area,
-    );
+    f.render_widget(List::new(items), area);
 }
 
 fn draw_user_profile(f: &mut Frame, user: &crate::api::User, area: Rect) {
     let about = user.about_plain();
     let mut lines = vec![
-        Line::from(Span::raw("")),
-        Line::from(Span::styled(format!("  {}", user.id), Style::default().fg(ORANGE).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("  {}", user.id),
+            Theme::accent().add_modifier(Modifier::BOLD),
+        )),
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(format!("▲ {} karma", user.karma), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("▲ {} karma", user.karma),
+                Theme::accent_soft().add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::raw("  "),
             Span::styled(
                 format!("Joined {}  ·  {} submissions", user.joined_ago(), user.submission_count()),
-                Style::default().fg(GRAY),
+                Theme::secondary(),
             ),
         ]),
         Line::from(vec![
             Span::raw("  "),
             Span::styled(
                 format!("https://news.ycombinator.com/user?id={}", user.id),
-                Style::default().fg(Color::Blue).add_modifier(Modifier::UNDERLINED),
+                Theme::accent_soft(),
             ),
         ]),
     ];
     if !about.is_empty() {
-        lines.push(Line::from(Span::raw("")));
-        lines.push(Line::from(Span::styled("  About", Style::default().fg(GRAY))));
-        lines.push(Line::from(Span::raw("  ─────────────────────────────────────")));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("  about", Theme::secondary())));
+        lines.push(Line::from(Span::styled(
+            "  ─────────────────────────────────────",
+            Theme::dim(),
+        )));
         for l in about.lines().take(20) {
-            lines.push(Line::from(vec![Span::raw("  "), Span::styled(l.to_string(), Style::default().fg(Color::White))]));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(l.to_string(), Theme::primary()),
+            ]));
         }
     }
-    lines.push(Line::from(Span::raw("")));
-    lines.push(Line::from(Span::styled("  Esc back  ·  o open in browser", Style::default().fg(GRAY))));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  Esc back  ·  o open in browser",
+        Theme::secondary(),
+    )));
 
     let p = Paragraph::new(lines)
-        .block(Block::default().title(format!(" User: {} ", user.id)).borders(Borders::ALL).border_style(Style::default().fg(ORANGE)))
+        .block(overlay_block(&format!("user: {}", user.id)))
         .wrap(Wrap { trim: false });
     f.render_widget(p, area);
 }
@@ -474,59 +631,71 @@ fn draw_login_overlay(f: &mut Frame, app: &App, area: Rect) {
 
     let state = &app.login_state;
     let username_style = if state.field == LoginField::Username {
-        Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)
+        Theme::accent().add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::White)
+        Theme::primary()
     };
     let password_style = if state.field == LoginField::Password {
-        Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)
+        Theme::accent().add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::White)
+        Theme::primary()
     };
 
     let masked = "*".repeat(state.password.len());
     let cursor = "█";
 
     let lines = vec![
-        Line::from(Span::raw("")),
-        Line::from(Span::styled("  Username", Style::default().fg(GRAY))),
+        Line::from(""),
+        Line::from(Span::styled("  Username", Theme::secondary())),
         Line::from(vec![
             Span::raw("  "),
             Span::styled(
-                format!("{}{}", state.username, if state.field == LoginField::Username { cursor } else { "" }),
+                format!(
+                    "{}{}",
+                    state.username,
+                    if state.field == LoginField::Username { cursor } else { "" }
+                ),
                 username_style,
             ),
         ]),
-        Line::from(Span::raw("")),
-        Line::from(Span::styled("  Password", Style::default().fg(GRAY))),
+        Line::from(""),
+        Line::from(Span::styled("  Password", Theme::secondary())),
         Line::from(vec![
             Span::raw("  "),
             Span::styled(
-                format!("{}{}", masked, if state.field == LoginField::Password { cursor } else { "" }),
+                format!(
+                    "{}{}",
+                    masked,
+                    if state.field == LoginField::Password { cursor } else { "" }
+                ),
                 password_style,
             ),
         ]),
-        Line::from(Span::raw("")),
+        Line::from(""),
         if state.error.is_empty() {
-            Line::from(Span::raw(""))
+            Line::from("")
         } else {
-            Line::from(Span::styled(format!("  {}", state.error), Style::default().fg(Color::Red)))
+            Line::from(Span::styled(
+                format!("  {}", state.error),
+                Style::default().fg(Color::Red),
+            ))
         },
-        Line::from(Span::raw("")),
+        Line::from(""),
         Line::from(Span::styled(
             "  Tab: switch field  ·  Enter: login  ·  Esc: cancel",
-            Style::default().fg(GRAY),
+            Theme::secondary(),
         )),
     ];
 
     let p = Paragraph::new(lines)
         .block(
             Block::default()
-                .title(" Login to Hacker News ")
+                .title(Span::styled(" Login to Hacker News ", Theme::secondary()))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(ORANGE)),
+                .border_type(BorderType::Rounded)
+                .border_style(Theme::accent()),
         )
-        .style(Style::default().bg(DARK));
+        .style(Style::default().bg(Theme::BG));
     f.render_widget(p, popup);
 }
 
@@ -541,17 +710,16 @@ fn draw_compose_overlay(f: &mut Frame, app: &App, area: Rect) {
 
     let mut lines = vec![];
     for line in state.text.lines() {
-        lines.push(Line::from(Span::styled(line.to_string(), Style::default().fg(Color::White))));
+        lines.push(Line::from(Span::styled(line.to_string(), Theme::primary())));
     }
-    // cursor indicator at end
     let cursor_line = if state.text.ends_with('\n') || state.text.is_empty() {
-        Line::from(Span::styled("█", Style::default().fg(ORANGE)))
+        Line::from(Span::styled("█", Theme::accent()))
     } else {
         let last = state.text.lines().last().unwrap_or("").to_string();
         lines.pop();
         Line::from(vec![
-            Span::styled(last, Style::default().fg(Color::White)),
-            Span::styled("█", Style::default().fg(ORANGE)),
+            Span::styled(last, Theme::primary()),
+            Span::styled("█", Theme::accent()),
         ])
     };
     lines.push(cursor_line);
@@ -560,15 +728,16 @@ fn draw_compose_overlay(f: &mut Frame, app: &App, area: Rect) {
     let p = Paragraph::new(lines)
         .block(
             Block::default()
-                .title(title)
+                .title(Span::styled(title, Theme::secondary()))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(ORANGE))
+                .border_type(BorderType::Rounded)
+                .border_style(Theme::accent())
                 .title_bottom(Line::from(Span::styled(
                     " Ctrl+S submit  ·  Esc cancel ",
-                    Style::default().fg(GRAY),
+                    Theme::secondary(),
                 ))),
         )
-        .style(Style::default().bg(DARK))
+        .style(Style::default().bg(Theme::BG))
         .wrap(Wrap { trim: false });
     f.render_widget(p, popup);
 }
@@ -580,24 +749,30 @@ fn blocks_to_lines(blocks: &[crate::reader::Block]) -> Vec<Line<'_>> {
     for block in blocks {
         match block {
             Block::Heading(level, text) => {
-                let prefix = if *level == 1 { "━━ " } else if *level == 2 { "── " } else { "· " };
-                let style = if *level <= 2 {
-                    Style::default().fg(ORANGE).add_modifier(Modifier::BOLD)
+                let prefix = if *level == 1 {
+                    "━━ "
+                } else if *level == 2 {
+                    "── "
                 } else {
-                    Style::default().fg(ORANGE)
+                    "·  "
+                };
+                let style = if *level <= 2 {
+                    Theme::accent().add_modifier(Modifier::BOLD)
+                } else {
+                    Theme::accent()
                 };
                 lines.push(Line::from(Span::styled(format!("{prefix}{text}"), style)));
                 lines.push(Line::raw(""));
             }
             Block::Paragraph(text) => {
-                lines.push(Line::from(text.as_str()));
+                lines.push(Line::from(Span::styled(text.as_str(), Theme::primary())));
                 lines.push(Line::raw(""));
             }
             Block::Code(text) => {
                 for l in text.lines() {
                     lines.push(Line::from(Span::styled(
                         format!("  {l}"),
-                        Style::default().fg(Color::DarkGray),
+                        Theme::secondary(),
                     )));
                 }
                 lines.push(Line::raw(""));
@@ -605,16 +780,16 @@ fn blocks_to_lines(blocks: &[crate::reader::Block]) -> Vec<Line<'_>> {
             Block::Quote(text) => {
                 for l in text.lines() {
                     lines.push(Line::from(vec![
-                        Span::styled("│ ", Style::default().fg(ORANGE)),
-                        Span::styled(l, Style::default().fg(GRAY)),
+                        Span::styled("│ ", Theme::accent()),
+                        Span::styled(l, Theme::secondary()),
                     ]));
                 }
                 lines.push(Line::raw(""));
             }
             Block::ListItem(text) => {
                 lines.push(Line::from(vec![
-                    Span::styled("• ", Style::default().fg(ORANGE)),
-                    Span::from(text.as_str()),
+                    Span::styled("• ", Theme::accent()),
+                    Span::styled(text.as_str(), Theme::primary()),
                 ]));
             }
         }
@@ -623,25 +798,31 @@ fn blocks_to_lines(blocks: &[crate::reader::Block]) -> Vec<Line<'_>> {
     lines
 }
 
-fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scroll: usize, area: Rect) {
+fn draw_reader_overlay(
+    f: &mut Frame,
+    content: &crate::app::ReaderContent,
+    scroll: usize,
+    area: Rect,
+) {
     let popup = centered_rect(90, 90, area);
     f.render_widget(Clear, popup);
 
     let title = format!(" {} ", content.title);
     let block = Block::default()
-        .title(title)
+        .title(Span::styled(title, Theme::secondary()))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ORANGE))
+        .border_type(BorderType::Rounded)
+        .border_style(Theme::accent())
         .title_bottom(Line::from(Span::styled(
             " g/G top/bot · j/k scroll · d/u page · n/N section · o browser · Esc close ",
-            Style::default().fg(GRAY),
+            Theme::secondary(),
         )));
     let inner = block.inner(popup);
     f.render_widget(block, popup);
 
     let lines = blocks_to_lines(&content.blocks);
     let p = Paragraph::new(lines)
-        .style(Style::default().fg(Color::White).bg(DARK))
+        .style(Style::default().fg(Theme::PRIMARY).bg(Theme::BG))
         .wrap(Wrap { trim: true })
         .scroll((scroll as u16, 0));
     f.render_widget(p, inner);
@@ -650,34 +831,49 @@ fn draw_reader_overlay(f: &mut Frame, content: &crate::app::ReaderContent, scrol
 fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     match app.mode {
         Mode::Command => {
-            let p = Paragraph::new(format!(":{}", app.command_input))
-                .style(Style::default().fg(Color::White).bg(DARK));
-            f.render_widget(p, area);
+            f.render_widget(
+                Paragraph::new(format!(":{}", app.command_input))
+                    .style(Theme::primary().bg(Theme::BG)),
+                area,
+            );
         }
         Mode::Search => {
-            let p = Paragraph::new(format!("?{}", app.search_input))
-                .style(Style::default().fg(Color::White).bg(DARK));
-            f.render_widget(p, area);
+            f.render_widget(
+                Paragraph::new(format!("?{}", app.search_input))
+                    .style(Theme::primary().bg(Theme::BG)),
+                area,
+            );
         }
         _ => {
-            let msg_style = if app.loading { Style::default().fg(ORANGE) } else { Style::default().fg(GRAY) };
+            let msg_style = if app.loading {
+                Theme::accent()
+            } else {
+                Theme::secondary()
+            };
             if let Some(progress) = &app.progress {
                 let spans = progress.spans();
                 let progress_width = spans.len() as u16 + 2;
                 if area.width > progress_width {
                     let chunks = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([Constraint::Min(0), Constraint::Length(progress_width)])
+                        .constraints([
+                            Constraint::Min(0),
+                            Constraint::Length(progress_width),
+                        ])
                         .split(area);
-                    let mut progress_line = vec![Span::raw(" ")];
+                    let mut progress_line: Vec<Span<'static>> = vec![Span::raw(" ")];
                     progress_line.extend(spans);
                     f.render_widget(
-                        Paragraph::new(Line::from(Span::styled(&app.status_message, msg_style)))
-                            .style(Style::default().bg(DARK)),
+                        Paragraph::new(Line::from(Span::styled(
+                            &app.status_message,
+                            msg_style,
+                        )))
+                        .style(Style::default().bg(Theme::BG)),
                         chunks[0],
                     );
                     f.render_widget(
-                        Paragraph::new(Line::from(progress_line)).style(Style::default().bg(DARK)),
+                        Paragraph::new(Line::from(progress_line))
+                            .style(Style::default().bg(Theme::BG)),
                         chunks[1],
                     );
                     return;
@@ -685,7 +881,7 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
             }
             f.render_widget(
                 Paragraph::new(Line::from(Span::styled(&app.status_message, msg_style)))
-                    .style(Style::default().bg(DARK)),
+                    .style(Style::default().bg(Theme::BG)),
                 area,
             );
         }
@@ -736,7 +932,7 @@ mod render_tests {
     fn header_shows_active_feed_top() {
         let app = test_app(1);
         let screen = render(&app);
-        assert!(screen.contains("1:Top"), "active Top feed label missing");
+        assert!(screen.contains("TOP"), "active Top feed label missing");
     }
 
     #[test]
@@ -744,14 +940,14 @@ mod render_tests {
         let mut app = test_app(1);
         app.feed = Feed::New;
         let screen = render(&app);
-        assert!(screen.contains("2:New"), "active New feed label missing");
+        assert!(screen.contains("NEW"), "active New feed label missing");
     }
 
     #[test]
     fn header_shows_hnr_branding() {
         let app = test_app(0);
         let screen = render(&app);
-        assert!(screen.contains("hnr"), "hnr brand missing");
+        assert!(screen.contains("H·N·R"), "H·N·R brand missing");
     }
 
     #[test]
@@ -795,8 +991,6 @@ mod render_tests {
         assert!(screen.contains("(self post)"), "self post indicator missing");
     }
 
-    // ── Hints bar ─────────────────────────────────────────────────────────
-
     #[test]
     fn hints_bar_shows_login_when_no_session() {
         let app = test_app(1);
@@ -811,8 +1005,6 @@ mod render_tests {
         let screen = render(&app);
         assert!(screen.contains("logout"), "logout hint missing when logged in");
     }
-
-    // ── Status bar ────────────────────────────────────────────────────────
 
     #[test]
     fn status_bar_shows_status_message() {
@@ -830,8 +1022,6 @@ mod render_tests {
         let screen = render(&app);
         assert!(screen.contains(":top"), "command input missing");
     }
-
-    // ── Login overlay ─────────────────────────────────────────────────────
 
     #[test]
     fn login_overlay_renders_fields() {
@@ -861,8 +1051,6 @@ mod render_tests {
         assert!(screen.contains("Bad credentials"), "login error not shown");
     }
 
-    // ── Compose overlay ───────────────────────────────────────────────────
-
     #[test]
     fn compose_overlay_renders_reply_and_text() {
         let mut app = test_app(1);
@@ -880,8 +1068,6 @@ mod render_tests {
         assert!(screen.contains("Ctrl+S"), "submit hint missing");
     }
 
-    // ── User profile ──────────────────────────────────────────────────────
-
     #[test]
     fn user_profile_renders_karma_and_about() {
         let mut app = test_app(1);
@@ -898,8 +1084,6 @@ mod render_tests {
         assert!(screen.contains("155000"), "karma missing");
         assert!(screen.contains("Lisp hacker"), "about text missing");
     }
-
-    // ── Comments ──────────────────────────────────────────────────────────
 
     #[test]
     fn comments_render_author_and_text() {
@@ -928,17 +1112,15 @@ mod render_tests {
         app.comments = vec![root];
         app.comments_story_id = Some(100);
         let screen = render(&app);
-        assert!(screen.contains("[+]"), "expand marker missing for collapsed comment");
+        assert!(screen.contains('▸'), "collapse glyph missing for collapsed comment");
     }
-
-    // ── Bookmarks ─────────────────────────────────────────────────────────
 
     #[test]
     fn header_shows_bookmarks_and_jobs_tabs() {
         let app = test_app(0);
         let screen = render(&app);
-        assert!(screen.contains("Bookmarks"), "bookmarks tab missing from header");
-        assert!(screen.contains("Jobs"), "jobs tab missing from header");
+        assert!(screen.contains("BOOKMARKS"), "bookmarks tab missing from header");
+        assert!(screen.contains("JOBS"), "jobs tab missing from header");
     }
 
     #[test]
@@ -962,10 +1144,8 @@ mod render_tests {
         let mut app = test_app(1);
         app.feed = Feed::Bookmarks;
         let screen = render(&app);
-        assert!(screen.contains("Bookmarks"), "Bookmarks not in story list title");
+        assert!(screen.contains("bookmarks"), "bookmarks not in story list title");
     }
-
-    // ── Expand in place ───────────────────────────────────────────────────
 
     #[test]
     fn expanded_comment_shows_full_text_inline() {
@@ -995,13 +1175,11 @@ mod render_tests {
         assert!(screen.contains("First line"), "preview line missing");
     }
 
-    // ── Seen tracking ────────────────────────────────────────────────────
-
     #[test]
     fn header_shows_jobs_tab() {
         let app = test_app(0);
         let screen = render(&app);
-        assert!(screen.contains("Jobs"), "Jobs tab missing from header");
+        assert!(screen.contains("JOBS"), "Jobs tab missing from header");
     }
 
     #[test]
@@ -1013,8 +1191,6 @@ mod render_tests {
         assert!(screen.contains("Story 1"), "seen story title should still appear");
         assert!(screen.contains("Story 2"), "unseen story title should appear");
     }
-
-    // ── Search ────────────────────────────────────────────────────────────
 
     #[test]
     fn search_mode_status_bar_shows_query_input() {
@@ -1046,7 +1222,7 @@ mod render_tests {
     fn story_list_title_shows_feed_name_when_no_search() {
         let app = test_app(1);
         let screen = render(&app);
-        assert!(screen.contains("Top Stories"), "feed name not shown without search");
+        assert!(screen.contains("top stories"), "feed name not shown without search");
         assert!(!screen.contains("Search:"), "unexpected search prefix without search query");
     }
 
@@ -1061,7 +1237,7 @@ mod render_tests {
         app.comments = vec![root];
         app.comments_story_id = Some(100);
         let screen = render(&app);
-        assert!(screen.contains("[-]"), "collapse marker missing for expanded comment");
+        assert!(screen.contains('▾'), "expand glyph missing for expanded comment");
     }
 }
 

@@ -528,7 +528,7 @@ impl App {
                 self.comment_scroll = 0;
                 self.active_pane = Pane::Stories;
                 self.status_message = format!(
-                    "{} stories | j/k navigate | Enter comments | Tab pane | v vote | c reply | / cmd",
+                    "{} stories · j/k navigate · Enter comments · Tab pane · v vote · c reply · / cmd",
                     self.stories.len()
                 );
             }
@@ -562,7 +562,7 @@ impl App {
                 self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
                 self.comment_scroll = scroll;
                 self.status_message = format!(
-                    "{} top-level threads | j/k | Space collapse | v vote | c reply | Tab back",
+                    "{} top-level threads · j/k nav · Space collapse · u unread · v vote · c reply · Tab back",
                     self.comments.len()
                 );
                 return;
@@ -593,7 +593,7 @@ impl App {
             self.comment_cursor = cursor.min(self.flat_comments().len().saturating_sub(1));
             self.comment_scroll = scroll;
             self.status_message = format!(
-                "{} top-level threads | j/k | Space collapse | v vote | c reply | Tab back",
+                "{} top-level threads · j/k nav · Space collapse · u unread · v vote · c reply · Tab back",
                 self.comments.len()
             );
         }
@@ -717,7 +717,7 @@ impl App {
                     self.comment_scroll = scroll;
                     self.active_pane = Pane::Comments;
                     self.status_message = format!(
-                        "{} top-level threads | j/k | Space collapse | v vote | c reply | Tab back",
+                        "{} top-level threads · j/k nav · Space collapse · u unread · v vote · c reply · Tab back",
                         self.comments.len()
                     );
                 }

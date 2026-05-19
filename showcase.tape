@@ -1,108 +1,156 @@
 Output showcase.gif
 
-Set Shell "zsh"
+Set Shell "bash"
 Set FontSize 15
 Set Width 1600
 Set Height 900
 Set Theme "Catppuccin Mocha"
-Set Padding 24
-Set PlaybackSpeed 2
-Set TypingSpeed 80ms
+Set Padding 0
+Set PlaybackSpeed 2.0
+Set TypingSpeed 60ms
+Set WaitTimeout 15s
+Set CursorBlink false
 
-Hide
-Type "export PATH=$HOME/.cargo/bin:$PATH"
-Enter
-Sleep 200ms
-Type "cp /Users/prasanth/work/fun/hnr/target/release/hnr ~/.cargo/bin/hnr"
-Enter
-Sleep 500ms
-Show
-
-# Launch — Refreshing shimmer visible while stories load
-Type "hnr"
+# Launch hnr
+Type "/Users/prasanth/work/fun/hnr/target/debug/hnr"
 Enter
 Sleep 4500ms
 
-# Scroll quickly through a few stories
-Type "j"
-Sleep 150ms
-Type "j"
-Sleep 150ms
-Type "j"
-Sleep 200ms
-
-# Settle — shimmer restarts, 3s fires reader prefetch
+# Refresh feed
+Type "R"
 Sleep 3000ms
 
-# Open reader — Fetching article shimmer
-Type "r"
-Sleep 6s
-
-# Navigate within reader
-Type "j"
-Sleep 250ms
-Type "j"
-Sleep 250ms
-Type "n"
-Sleep 900ms
-Type "n"
-Sleep 900ms
-Type "d"
+# — Top stories — browse slowly so the design reads
+Sleep 600ms
+Down
 Sleep 700ms
-Type "G"
+Down
 Sleep 700ms
-Type "g"
-Sleep 500ms
-
-# Close reader — comments already prefetched
-Escape
-Sleep 400ms
-
-# Enter comments — instant
-Enter
+Down
 Sleep 900ms
 
-# Navigate comment tree
-Type "j"
-Sleep 250ms
-Type "j"
-Sleep 250ms
-Enter
-Sleep 700ms
-Type " "
-Sleep 500ms
-
-# Vote and yank
-Type "v"
-Sleep 700ms
-Type "y"
-Sleep 500ms
-
-# Back to stories
-Tab
-Sleep 400ms
-
-# Algolia search
-Type "?"
-Sleep 400ms
-Type "ratatui"
-Sleep 300ms
+# Open comments for story 4
 Enter
 Sleep 3500ms
 
-# Navigate to 3rd result — dwell for comment prefetch shimmer
-Type "j"
-Sleep 250ms
-Type "j"
-Sleep 250ms
-Sleep 5500ms
+# Read the thread
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Down
+Sleep 600ms
 
-# Bookmark after comments arrive
-Type "b"
+# Expand a comment fully
+Enter
+Sleep 1000ms
+
+# Collapse the thread
+Space
 Sleep 800ms
 
-# Switch to bookmarks feed and quit
-Type "7"
-Sleep 2000ms
+# Scroll more
+Down
+Sleep 400ms
+Down
+Sleep 400ms
+Down
+Sleep 700ms
+
+# Back to stories
+Escape
+Sleep 700ms
+
+# — New feed —
+Type "2"
+Sleep 3000ms
+Down
+Sleep 600ms
+Down
+Sleep 600ms
+Down
+Sleep 900ms
+
+# — Best feed —
+Type "3"
+Sleep 2800ms
+Down
+Sleep 500ms
+Down
+Sleep 800ms
+
+# — Ask HN —
+Type "4"
+Sleep 2800ms
+Down
+Sleep 500ms
+Down
+Sleep 600ms
+Down
+Sleep 900ms
+
+# Open Ask HN comments
+Enter
+Sleep 3500ms
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Down
+Sleep 600ms
+Escape
+Sleep 700ms
+
+# — Show HN —
+Type "5"
+Sleep 2800ms
+Down
+Sleep 500ms
+Down
+Sleep 800ms
+
+# — Back to Top, open reader mode —
+Type "1"
+Sleep 2500ms
+Down
+Sleep 500ms
+Down
+Sleep 700ms
+
+# Reader mode
+Type "r"
+Sleep 3500ms
+Down
+Sleep 400ms
+Down
+Sleep 400ms
+Down
+Sleep 400ms
+Down
+Sleep 600ms
+
+# Close reader
 Type "q"
-Sleep 300ms
+Sleep 700ms
+
+# — Search —
+Type "?"
+Sleep 600ms
+Type "rust async"
+Sleep 400ms
+Enter
+Sleep 3000ms
+Down
+Sleep 500ms
+Down
+Sleep 800ms
+
+# Back to top
+Type "1"
+Sleep 2000ms
+
+# Quit
+Type "q"
+Sleep 400ms

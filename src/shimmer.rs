@@ -58,7 +58,8 @@ impl Progress {
 
     pub fn spans(&self) -> Vec<Span<'static>> {
         let dots = (self.started_at.elapsed().as_secs() % 3) + 1;
-        let text = format!("{}{}", self.label, ".".repeat(dots as usize));
+        // Pad to 3 dots always so the widget width never changes.
+        let text = format!("{}{}{}", self.label, ".".repeat(dots as usize), " ".repeat(3 - dots as usize));
         shimmer_spans(&text, BASE_ORANGE, HIGH_ORANGE)
     }
 }
