@@ -6,151 +6,126 @@ Set Width 1600
 Set Height 900
 Set Theme "Catppuccin Mocha"
 Set Padding 0
-Set PlaybackSpeed 2.0
-Set TypingSpeed 60ms
-Set WaitTimeout 15s
+Set PlaybackSpeed 3.0
+Set TypingSpeed 80ms
+Set WaitTimeout 30s
 Set CursorBlink false
 
-# Launch hnr
-Type "/Users/prasanth/work/fun/hnr/target/debug/hnr"
+Hide
+Type "export PATH=$HOME/.cargo/bin:$PATH"
 Enter
-Sleep 4500ms
+Sleep 200ms
+Type "rm -f ~/.hnr/seen.json"
+Enter
+Sleep 200ms
+Show
+
+# Install
+Type "cargo install hnr"
+Enter
+Sleep 4s
+
+# Launch
+Type "hnr"
+Enter
+Sleep 4s
 
 # Refresh feed
 Type "R"
-Sleep 3000ms
+Sleep 3s
 
-# — Top stories — browse slowly so the design reads
+# Navigate up and down
+Down
 Sleep 600ms
 Down
-Sleep 700ms
+Sleep 600ms
 Down
-Sleep 700ms
-Down
-Sleep 900ms
-
-# Open comments for story 4
-Enter
-Sleep 3500ms
-
-# Read the thread
-Down
+Sleep 600ms
+Up
 Sleep 500ms
-Down
-Sleep 500ms
-Down
-Sleep 500ms
-Down
-Sleep 600ms
-
-# Expand a comment fully
-Enter
-Sleep 1000ms
-
-# Collapse the thread
-Space
-Sleep 800ms
-
-# Scroll more
-Down
-Sleep 400ms
-Down
-Sleep 400ms
-Down
+Up
 Sleep 700ms
 
-# Back to stories
-Escape
-Sleep 700ms
-
-# — New feed —
-Type "2"
-Sleep 3000ms
-Down
-Sleep 600ms
-Down
-Sleep 600ms
-Down
-Sleep 900ms
-
-# — Best feed —
+# Switch to Best
 Type "3"
-Sleep 2800ms
-Down
-Sleep 500ms
-Down
-Sleep 800ms
+Sleep 3s
 
-# — Ask HN —
-Type "4"
-Sleep 2800ms
-Down
-Sleep 500ms
+# Navigate to story 3 for reader
 Down
 Sleep 600ms
 Down
-Sleep 900ms
-
-# Open Ask HN comments
-Enter
-Sleep 3500ms
-Down
-Sleep 500ms
-Down
-Sleep 500ms
-Down
-Sleep 600ms
-Escape
 Sleep 700ms
 
-# — Show HN —
-Type "5"
-Sleep 2800ms
-Down
-Sleep 500ms
-Down
-Sleep 800ms
-
-# — Back to Top, open reader mode —
-Type "1"
-Sleep 2500ms
-Down
-Sleep 500ms
-Down
-Sleep 700ms
-
-# Reader mode
+# Open reader
 Type "r"
-Sleep 3500ms
-Down
-Sleep 400ms
-Down
-Sleep 400ms
-Down
-Sleep 400ms
-Down
-Sleep 600ms
+Sleep 4s
+
+# Navigate paragraphs with n
+Type "n"
+Sleep 800ms
+Type "n"
+Sleep 800ms
+Type "n"
+Sleep 800ms
+Type "n"
+Sleep 800ms
+Type "N"
+Sleep 800ms
+Type "N"
+Sleep 1000ms
 
 # Close reader
 Type "q"
 Sleep 700ms
 
-# — Search —
-Type "?"
-Sleep 600ms
-Type "rust async"
+# Back to story 1, load comments
+Up
 Sleep 400ms
+Up
+Sleep 600ms
 Enter
-Sleep 3000ms
+Sleep 3500ms
+
+# Navigate comments
 Down
 Sleep 500ms
 Down
+Sleep 500ms
+Down
+Sleep 600ms
+
+# Expand a comment
+Enter
+Sleep 1000ms
+
+# Collapse it
+Space
 Sleep 800ms
 
-# Back to top
-Type "1"
-Sleep 2000ms
+# Back to stories
+Escape
+Sleep 600ms
+
+# Search for ratatui
+Type "?"
+Sleep 500ms
+Type "ratatui"
+Sleep 400ms
+Enter
+Sleep 3s
+
+# Navigate results and bookmark one
+Down
+Sleep 500ms
+Down
+Sleep 700ms
+Type "b"
+Sleep 600ms
+
+# Switch to Bookmarks
+Type "7"
+Sleep 3500ms
 
 # Quit
 Type "q"
-Sleep 400ms
+Sleep 500ms
